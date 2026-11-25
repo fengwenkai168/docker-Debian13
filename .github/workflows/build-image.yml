@@ -39,6 +39,7 @@ on:
       - supervisord.conf
       - compose.yaml
       - docker-compose.yaml
+      - image/AGENTS.md
       - .dockerignore
       - scripts/write-image-changelog.sh
       - scripts/update-readme-changelog.cjs

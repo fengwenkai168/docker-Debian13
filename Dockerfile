@@ -368,6 +368,14 @@ COPY healthcheck.sh /usr/local/bin/healthcheck.sh
 # 不读取 .env，也不需要构建时替换任何占位符。
 COPY docker-compose.yaml /opt/docker-debian13/docker-compose.yaml
 
+# 打包默认 AI 约束文件。
+# - /opt/docker-debian13/AGENTS.md 是镜像内永久模板；
+# - /workspaces/AGENTS.md 是默认工作区副本，供未挂载工作区时直接使用；
+# - 运行时如果 /workspaces 是空挂载目录，entrypoint 会把模板复制进去，
+#   但不会覆盖用户已经存在的 AGENTS.md。
+COPY image/AGENTS.md /opt/docker-debian13/AGENTS.md
+COPY image/AGENTS.md /workspaces/AGENTS.md
+
 # 确保容器初始化、启动和健康检查脚本都具有可执行权限。
 RUN chmod 0755 \
     /usr/local/bin/docker-entrypoint.sh \

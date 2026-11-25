@@ -38,6 +38,17 @@ mkdir -p \
     /root/.dsh \
     /root/.kimi-code
 
+# 镜像内置默认 AI 约束文件。
+# /workspaces 通常是宿主机 bind mount；如果宿主机目录里还没有 AGENTS.md，
+# 就把镜像模板复制进去，让 OpenCode、DSH、Kimi 等 AI 启动后能读取。
+# 只在目标不存在时复制，绝不覆盖用户已有的约束文件。
+agents_template="/opt/docker-debian13/AGENTS.md"
+agents_target="/workspaces/AGENTS.md"
+if [[ -s "$agents_template" && ! -e "$agents_target" ]]; then
+    install -m 0644 "$agents_template" "$agents_target"
+    echo "已写入默认 AI 约束文件：$agents_target"
+fi
+
 # Compose 将宿主机 ./etc/ssh 挂载到容器 /etc/ssh。
 # 首次使用时挂载目录可能为空，从而遮住镜像中原有的 sshd_config。
 # -s 用于检查文件存在且大小大于 0；只有配置缺失或为空时才写入最小配置，
