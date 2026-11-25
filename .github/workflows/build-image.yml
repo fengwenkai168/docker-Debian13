@@ -271,6 +271,11 @@ jobs:
           git add README.md
           git commit -m "docs: update build changelog ${RELEASE_TAG} [skip ci]"
 
+          # 上一步导出的 Release 部署文件覆盖了仓库中已跟踪的 docker-compose.yaml。
+          # Release 附件已经上传完成；这里恢复该文件，避免工作区存在未暂存修改，
+          # 导致后面的 git rebase 报 "cannot rebase: You have unstaged changes"。
+          git restore -- docker-compose.yaml
+
           git fetch origin "${GITHUB_REF_NAME}"
           git rebase "origin/${GITHUB_REF_NAME}"
           git push origin "HEAD:${GITHUB_REF_NAME}"
