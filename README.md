@@ -195,50 +195,50 @@ docker compose -f docker-compose.yaml logs --tail=100 dev | grep -F "database sy
 <!-- versions:start -->
 | 工具 | 版本 |
 | --- | --- |
-| Debian | `13 (trixie)` |
-| Node.js | `24.22.3` |
+| Debian | `13.8` |
+| Node.js | `v24.22.3` |
 | npm | `11.21.3` |
 | pnpm | `11.29.0` |
-| OpenCode | `2.4.1` |
+| OpenCode | `opencode v2.4.1` |
 | DeepSeek Harness | `0.2.2-rc.5` |
 | Kimi Code CLI | `2.7.3` |
-| Python | `3.13.5` |
-| pip | `25.1.1` |
+| Python | `Python 3.13.5` |
+| pip | `pip 25.1.1 from /usr/lib/python3/dist-packages/pip (python 3.13)` |
 | venv | `随 Python 3.13` |
-| uv | `0.13.10` |
-| Git | `2.47.3` |
-| curl | `8.14.1` |
-| wget | `1.25.0` |
-| GitHub CLI | `2.105.0` |
-| GCC / G++ | `14.2.0` |
-| make | `4.4.1` |
-| CMake | `3.31.6` |
+| uv | `uv 0.13.10 (x86_64-unknown-linux-gnu)` |
+| Git | `git version 2.47.3` |
+| curl | `curl 8.14.1 (x86_64-pc-linux-gnu) libcurl/8.14.1 OpenSSL/3.5.9 zlib/1.3.1 brotli/1.1.0 zstd/1.5.7 libidn2/2.3.8 libpsl/0.21.2 libssh2/1.11.1 nghttp2/1.64.0 nghttp3/1.8.0 librtmp/2.3 OpenLDAP/2.6.10` |
+| wget | `GNU Wget 1.25.0 在 linux-gnu 上编译。` |
+| GitHub CLI | `gh version 2.105.0 (2026-11-17)` |
+| GCC / G++ | `gcc (Debian 14.2.0-19) 14.2.0` |
+| make | `GNU Make 4.4.1` |
+| CMake | `cmake version 3.31.6` |
 | pkg-config | `1.8.1` |
-| jq | `1.7.1` |
-| ripgrep | `14.1.1` |
-| rsync | `3.5.0` |
-| 7-Zip | `25.01` |
-| pigz | `2.8` |
-| zip | `3.0` |
-| unzip | `6.0` |
-| Vim | `9.1` |
-| less | `668` |
-| htop | `3.4.1` |
-| Chromium | `156.0.8078.108` |
-| Chromium 中文语言包 | `156.0.8078.108` |
-| Noto CJK | `20240730` |
-| Fontconfig | `2.15.0` |
-| Playwright | `1.65.1` |
-| iproute2 | `6.15.0` |
-| lsof | `4.99.4` |
-| strace | `6.13` |
-| dnsutils | `9.20.30` |
-| iputils-ping | `20240905` |
-| netcat-openbsd | `1.229` |
-| traceroute | `2.1.6` |
-| OpenSSH Server | `10.0p1` |
+| jq | `jq-1.7` |
+| ripgrep | `ripgrep 14.1.1` |
+| rsync | `rsync  version 3.5.0  protocol version 32` |
+| 7-Zip | `25.01+dfsg-1~deb13u2` |
+| pigz | `pigz 2.8` |
+| zip | `3.0-15+deb13u1` |
+| unzip | `UnZip 6.00 of 20 April 2009, by Debian. Original by Info-ZIP.` |
+| Vim | `VIM - Vi IMproved 9.1 (2024 Jan 02, 编译于 Nov 04 2026 22:12:34)` |
+| less | `less 668 (GNU regular expressions)` |
+| htop | `htop 3.4.1` |
+| Chromium | `Chromium 156.0.8078.108 built on Debian GNU/Linux 13 (trixie)` |
+| Chromium 中文语言包 | `156.0.8078.108-1~deb13u1` |
+| Noto CJK | `1:20240730+repack1-1` |
+| Fontconfig | `fontconfig version 2.15.0` |
+| Playwright | `Version 1.65.1` |
+| iproute2 | `ip utility, iproute2-6.15.0, libbpf 1.5.0` |
+| lsof | `4.99.4+dfsg-2` |
+| strace | `strace -- version 6.13` |
+| dnsutils | `DiG 9.20.30-1~deb13u1-Debian` |
+| iputils-ping | `ping from iputils 20240905` |
+| netcat-openbsd | `1.229-1` |
+| traceroute | `1:2.1.6-1` |
+| OpenSSH Server | `1:10.0p1-7+deb13u4` |
 | Supervisor | `4.2.5` |
-| PostgreSQL | `16.16` |
+| PostgreSQL | `psql (PostgreSQL) 16.16 (Debian 16.16-1.pgdg13+1)` |
 <!-- versions:end -->
 
 ## 内置环境
@@ -475,5 +475,66 @@ GitHub Release 也使用同一个语义版本。Release 附带的 `docker-compos
 每次 GitHub Actions 成功构建后，会自动在下面写入一条实际版本清单。完整历史也可以在同一次构建的 GitHub Release 和 Actions Artifact 中查看。
 
 <!-- changelog:start -->
-> 等待第一次 GitHub Actions 构建后自动写入更新日志。
+<details>
+<summary><strong>v0.0.3</strong> · 2026-11-25 09:33:50 UTC</summary>
+
+| 字段 | 内容 |
+| --- | --- |
+| 构建时间 | `2026-11-25 09:33:50 UTC` |
+| 镜像版本 | `v0.0.3` |
+| 仓库 | `fengwenkai168/docker-Debian13` |
+| 分支 / ref | `main` |
+| 提交 | [`fa92e1a792243fc8b41cf6a6edac03b9c378cb28`](https://github.com/fengwenkai168/docker-Debian13/commit/fa92e1a792243fc8b41cf6a6edac03b9c378cb28) |
+| Actions 运行 | #5（第 1 次尝试） |
+| 本地镜像 | `docker-debian13:latest` |
+| 镜像 ID | `sha256:e82f4180d8f971f63ddebf9eb98652532668ebccc27ca245035dd3745560a146` |
+
+| 工具 | 版本 |
+| --- | --- |
+| Debian | `13.8` |
+| Node.js | `v24.22.3` |
+| npm | `11.21.3` |
+| pnpm | `11.29.0` |
+| OpenCode | `opencode v2.4.1` |
+| DeepSeek Harness | `0.2.2-rc.5` |
+| Kimi Code CLI | `2.7.3` |
+| Python | `Python 3.13.5` |
+| pip | `pip 25.1.1 from /usr/lib/python3/dist-packages/pip (python 3.13)` |
+| venv | `随 Python 3.13` |
+| uv | `uv 0.13.10 (x86_64-unknown-linux-gnu)` |
+| Git | `git version 2.47.3` |
+| curl | `curl 8.14.1 (x86_64-pc-linux-gnu) libcurl/8.14.1 OpenSSL/3.5.9 zlib/1.3.1 brotli/1.1.0 zstd/1.5.7 libidn2/2.3.8 libpsl/0.21.2 libssh2/1.11.1 nghttp2/1.64.0 nghttp3/1.8.0 librtmp/2.3 OpenLDAP/2.6.10` |
+| wget | `GNU Wget 1.25.0 在 linux-gnu 上编译。` |
+| GitHub CLI | `gh version 2.105.0 (2026-11-17)` |
+| GCC / G++ | `gcc (Debian 14.2.0-19) 14.2.0` |
+| make | `GNU Make 4.4.1` |
+| CMake | `cmake version 3.31.6` |
+| pkg-config | `1.8.1` |
+| jq | `jq-1.7` |
+| ripgrep | `ripgrep 14.1.1` |
+| rsync | `rsync  version 3.5.0  protocol version 32` |
+| 7-Zip | `25.01+dfsg-1~deb13u2` |
+| pigz | `pigz 2.8` |
+| zip | `3.0-15+deb13u1` |
+| unzip | `UnZip 6.00 of 20 April 2009, by Debian. Original by Info-ZIP.` |
+| Vim | `VIM - Vi IMproved 9.1 (2024 Jan 02, 编译于 Nov 04 2026 22:12:34)` |
+| less | `less 668 (GNU regular expressions)` |
+| htop | `htop 3.4.1` |
+| Chromium | `Chromium 156.0.8078.108 built on Debian GNU/Linux 13 (trixie)` |
+| Chromium 中文语言包 | `156.0.8078.108-1~deb13u1` |
+| Noto CJK | `1:20240730+repack1-1` |
+| Fontconfig | `fontconfig version 2.15.0` |
+| Playwright | `Version 1.65.1` |
+| iproute2 | `ip utility, iproute2-6.15.0, libbpf 1.5.0` |
+| lsof | `4.99.4+dfsg-2` |
+| strace | `strace -- version 6.13` |
+| dnsutils | `DiG 9.20.30-1~deb13u1-Debian` |
+| iputils-ping | `ping from iputils 20240905` |
+| netcat-openbsd | `1.229-1` |
+| traceroute | `1:2.1.6-1` |
+| OpenSSH Server | `1:10.0p1-7+deb13u4` |
+| Supervisor | `4.2.5` |
+| PostgreSQL | `psql (PostgreSQL) 16.16 (Debian 16.16-1.pgdg13+1)` |
+
+</details>
 <!-- changelog:end -->
