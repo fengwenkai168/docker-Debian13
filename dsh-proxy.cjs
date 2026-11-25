@@ -26,8 +26,9 @@
 // 登录方式：
 // - 直接访问 http://任意地址:2224/ 会显示代理登录页；
 // - 输入 DSH_WEB_PASSWORD 或 DSH_WEB_TOKEN 后写入签名 Cookie；
-// - 登录成功后，代理在转发时自动注入 dsh 的真实随机 token，
-//   浏览器地址栏不再显示 token；
+// - 登录成功时代理用真实 token 向 dsh 交换一次会话 Cookie，
+//   之后浏览器凭 Cookie 访问，地址栏既不显示 token，也不会反复跳转；
+// - dsh 会话过期或缺失时，代理会自动恢复一次；
 // - 旧的 ?token=<DSH_WEB_TOKEN> 链接仍然可用，并会同时写入 Cookie。
 //
 // 该行为会绕过 dsh 针对恶意 Host 的额外防护，只应运行在可信网络中。
@@ -64,6 +65,21 @@ const AUTH_COOKIE = "dsh_proxy_auth";
 const AUTH_TTL_SECONDS = 7 * 24 * 60 * 60;
 const AUTH_SECRET = DSH_WEB_PASSWORD || DSH_WEB_TOKEN;
 const MAX_LOGIN_BODY_BYTES = 4096;
+
+// dsh 自己的浏览器会话 Cookie 名称。
+// dsh 使用 "dsh-auth-" + base64url(sha256(Host)) 生成该名称。
+// 代理把 Host 固定改写为 UPSTREAM_AUTHORITY，因此可以提前算出同一个名字。
+// 请求已经带有该 Cookie 时不能再注入 token：dsh 只要在 GET / 上看到 token，
+// 即使 Cookie 有效也会返回 303 清理地址栏，代理继续注入就会形成无限重定向。
+const DSH_AUTH_COOKIE = `dsh-auth-${
+    crypto.createHash("sha256").update(UPSTREAM_AUTHORITY).digest("base64url")
+}`;
+
+// dsh 会话失效时的自动恢复标记。
+// 恢复过程会重新交换一次 Cookie；如果恢复后仍然 401，这个短期 Cookie
+// 会让代理直接返回 401，而不是再次跳转，避免出现新的重定向循环。
+const REAUTH_GUARD_COOKIE = "dsh_proxy_reauth_guard";
+const REAUTH_GUARD_TTL_SECONDS = 10;
 
 // 没有固定 token 就无法提供稳定的登录入口，直接让 Supervisor 报错并重启。
 if (DSH_WEB_TOKEN.length === 0) {
@@ -110,6 +126,19 @@ function clearAuthCookie() {
     return `${AUTH_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`;
 }
 
+// dsh 会话恢复跳转前写入的一次性标记，短期有效，用来阻止恢复失败时反复跳转。
+function createReauthGuardCookie(secure) {
+    const parts = [
+        `${REAUTH_GUARD_COOKIE}=1`,
+        "Path=/",
+        "HttpOnly",
+        "SameSite=Lax",
+        `Max-Age=${REAUTH_GUARD_TTL_SECONDS}`,
+    ];
+    if (secure) parts.push("Secure");
+    return parts.join("; ");
+}
+
 function parseCookies(header) {
     const cookies = new Map();
     if (typeof header !== "string") return cookies;
@@ -153,6 +182,17 @@ function isAuthenticated(request) {
 
     const expires = Number(expiresText);
     return Number.isFinite(expires) && expires > Math.floor(Date.now() / 1000);
+}
+
+// 浏览器是否已经带着 dsh 自己的会话 Cookie。
+// 名字由固定 Host 计算而来，不需要解析或验证 Cookie 内容。
+function hasDshSession(request) {
+    return parseCookies(request.headers.cookie).has(DSH_AUTH_COOKIE);
+}
+
+// 恢复流程的一次性标记是否已经存在。
+function hasReauthGuard(request) {
+    return parseCookies(request.headers.cookie).has(REAUTH_GUARD_COOKIE);
 }
 
 function passwordMatches(value) {
@@ -337,6 +377,62 @@ function readRequestBody(request, limit) {
     });
 }
 
+// 读取 dsh 本次进程的真实随机 token。
+function readActualDshToken() {
+    try {
+        return fs.readFileSync(DSH_TOKEN_FILE, "utf8").trim();
+    } catch {
+        return "";
+    }
+}
+
+// 用真实 token 向 dsh 交换一次浏览器会话 Cookie。
+// dsh 只在 GET / 上接受 token，并返回 303 和 Set-Cookie。
+// 登录成功或会话恢复时调用一次，浏览器地址栏不会出现 token。
+function mintDshSessionCookie() {
+    const actualToken = readActualDshToken();
+    if (actualToken.length === 0) return Promise.resolve(null);
+
+    return new Promise((resolve) => {
+        let settled = false;
+        const finish = (cookies) => {
+            if (settled) return;
+            settled = true;
+            resolve(cookies);
+        };
+
+        const upstreamRequest = http.request(
+            {
+                host: UPSTREAM_HOST,
+                port: UPSTREAM_PORT,
+                method: "GET",
+                path: `/?token=${encodeURIComponent(actualToken)}`,
+                headers: {
+                    host: UPSTREAM_AUTHORITY,
+                    accept: "text/html",
+                },
+                timeout: 3000,
+            },
+            (upstreamResponse) => {
+                upstreamResponse.resume();
+
+                const setCookie = upstreamResponse.headers["set-cookie"];
+                if (Array.isArray(setCookie)) {
+                    finish(setCookie);
+                } else if (typeof setCookie === "string") {
+                    finish([setCookie]);
+                } else {
+                    finish(null);
+                }
+            },
+        );
+
+        upstreamRequest.on("timeout", () => upstreamRequest.destroy());
+        upstreamRequest.on("error", () => finish(null));
+        upstreamRequest.end();
+    });
+}
+
 async function handleLogin(request, response, requestUrl) {
     if (request.method === "GET" || request.method === "HEAD") {
         const next = sanitizeNextPath(requestUrl.searchParams.get("next") ?? "/");
@@ -381,20 +477,75 @@ async function handleLogin(request, response, requestUrl) {
         return;
     }
 
+    // 登录成功时顺便建立 dsh 自己的会话 Cookie。
+    // 这样后续普通请求可以只靠 Cookie 通过 dsh 认证，不必在每个请求上注入 token。
+    let dshCookies = [];
+    if (!hasDshSession(request)) {
+        dshCookies = (await mintDshSessionCookie()) ?? [];
+    }
+
     response.writeHead(303, {
         location: next,
-        "set-cookie": createAuthCookie(isSecureRequest(request)),
+        "set-cookie": [createAuthCookie(isSecureRequest(request)), ...dshCookies],
+        "cache-control": "no-store",
+    });
+    response.end();
+}
+
+// 会话恢复：代理登录仍然有效，但 dsh Cookie 缺失或过期时，
+// 用真实 token 重新交换一次 dsh Cookie，再回到原路径。
+// 恢复响应会带一个短期标记；如果恢复后仍然 401，代理不会再跳转。
+async function handleReauth(request, response, requestUrl) {
+    if (request.method !== "GET" && request.method !== "HEAD") {
+        response.writeHead(405, {
+            allow: "GET, HEAD",
+            "content-type": "text/plain; charset=utf-8",
+        });
+        response.end("Method Not Allowed\n");
+        return;
+    }
+
+    const next = sanitizeNextPath(requestUrl.searchParams.get("next") ?? "/");
+
+    if (!isAuthenticated(request)) {
+        redirect(response, `/__login?next=${encodeURIComponent(next)}`, 302);
+        return;
+    }
+
+    const dshCookies = await mintDshSessionCookie();
+    if (dshCookies === null || dshCookies.length === 0) {
+        response.writeHead(503, {
+            "content-type": "text/plain; charset=utf-8",
+            "retry-after": "2",
+            "cache-control": "no-store",
+        });
+        response.end("DeepSeek Harness session is not ready. Retry in a moment.\n");
+        return;
+    }
+
+    response.writeHead(303, {
+        location: next,
+        "set-cookie": [createReauthGuardCookie(isSecureRequest(request)), ...dshCookies],
         "cache-control": "no-store",
     });
     response.end();
 }
 
 // 将浏览器 URL 中的固定 token 替换为 dsh 本次进程的真实随机 token。
-// - 已登录且 URL 没有 token 时，自动注入真实 token，让浏览器地址栏保持干净。
 // - 带固定 token 的旧链接仍然可用，并会顺便写入登录 Cookie。
 // - token 与 Compose 固定值不一致时原样转发，避免代理掩盖错误凭据。
+// - 代理已登录但还没有 dsh 会话 Cookie 时，只对 GET 根路径自动注入一次，
+//   dsh 会返回 303 并种下它自己的 Cookie；之后的请求靠 Cookie 通过认证。
+// - 请求已经带有 dsh 会话 Cookie 时绝不再注入 token，否则 dsh 会一直 303。
 // - 需要注入 token 但捕获文件尚未生成时返回 tokenError，由调用方返回 503。
-function translateRequestUrl(rawUrl, authenticated = false) {
+function translateRequestUrl(
+    rawUrl,
+    {
+        authenticated = false,
+        hasSession = false,
+        allowAutoInject = false,
+    } = {},
+) {
     let parsed;
 
     try {
@@ -413,13 +564,13 @@ function translateRequestUrl(rawUrl, authenticated = false) {
         return { url: rawUrl, tokenError: false, providedFixedToken: false };
     }
 
-    let actualToken;
-    try {
-        actualToken = fs.readFileSync(DSH_TOKEN_FILE, "utf8").trim();
-    } catch {
-        actualToken = "";
+    // 浏览器已经有 dsh 会话，或者当前请求不适合注入（非根路径、API、WebSocket）：
+    // 原样转发，靠 Cookie 认证。
+    if (!providedFixedToken && (hasSession || !allowAutoInject)) {
+        return { url: rawUrl, tokenError: false, providedFixedToken: false };
     }
 
+    const actualToken = readActualDshToken();
     if (actualToken.length === 0) {
         return { url: rawUrl, tokenError: true, providedFixedToken };
     }
@@ -501,8 +652,8 @@ function rewriteLocation(location) {
     return location;
 }
 
-// 登录后如果 dsh 在跳转地址里带上了真实 token，把 token 去掉。
-// 代理会在后续请求中自动注入，因此浏览器地址栏不需要暴露 token。
+// 如果 dsh 在跳转地址里带上了真实 token，把 token 去掉。
+// 浏览器地址栏不需要暴露 token。
 function stripTokenFromLocation(location) {
     if (typeof location !== "string") return location;
 
@@ -515,6 +666,22 @@ function stripTokenFromLocation(location) {
     } catch {
         return location;
     }
+}
+
+// 判断一个 401 是否应该触发 dsh 会话恢复。
+// 只处理代理已登录、浏览器导航（Accept 含 text/html）的 GET/HEAD，
+// API 请求和恢复失败后的再次 401 都直接原样返回，避免误跳转或循环。
+function shouldReauthenticate(request, response, authenticated, requestUrl) {
+    if (!authenticated) return false;
+    if (response.statusCode !== 401) return false;
+    if (request.method !== "GET" && request.method !== "HEAD") return false;
+
+    const path = requestUrl.pathname;
+    if (path === "/api" || path.startsWith("/api/")) return false;
+    if (hasReauthGuard(request)) return false;
+
+    const accept = request.headers.accept;
+    return typeof accept === "string" && accept.includes("text/html");
 }
 
 // 普通 HTTP 请求处理。
@@ -544,7 +711,13 @@ const server = http.createServer((clientRequest, clientResponse) => {
         return;
     }
 
+    if (requestUrl.pathname === "/__dsh_reauth") {
+        void handleReauth(clientRequest, clientResponse, requestUrl);
+        return;
+    }
+
     const authenticated = isAuthenticated(clientRequest);
+    const sessionPresent = hasDshSession(clientRequest);
     const requestedToken = requestUrl.searchParams.get("token");
 
     // 没有登录 Cookie，也没有带 token：浏览器显示登录页。
@@ -567,7 +740,12 @@ const server = http.createServer((clientRequest, clientResponse) => {
         return;
     }
 
-    const translated = translateRequestUrl(clientRequest.url, authenticated);
+    const translated = translateRequestUrl(clientRequest.url, {
+        authenticated,
+        hasSession: sessionPresent,
+        // dsh 只在 GET / 上接受 token；HEAD 不注入，交给会话恢复处理。
+        allowAutoInject: clientRequest.method === "GET" && requestUrl.pathname === "/",
+    });
 
     // dsh 可能刚启动，还没打印出真实 token。
     // 返回 503 而不是把固定 token 直接发给 dsh，避免得到难以理解的 401。
@@ -590,6 +768,21 @@ const server = http.createServer((clientRequest, clientResponse) => {
             headers: forwardHeaders(clientRequest.headers),
         },
         (upstreamResponse) => {
+            // dsh Cookie 缺失或过期时，先内部恢复一次，避免用户看到裸 401。
+            // API 请求和恢复后的再次 401 不跳转。
+            if (shouldReauthenticate(clientRequest, upstreamResponse, authenticated, requestUrl)) {
+                upstreamResponse.resume();
+
+                const next = `${requestUrl.pathname}${requestUrl.search}`;
+                clientResponse.writeHead(302, {
+                    location: `/__dsh_reauth?next=${encodeURIComponent(next)}`,
+                    "set-cookie": createReauthGuardCookie(isSecureRequest(clientRequest)),
+                    "cache-control": "no-store",
+                });
+                clientResponse.end();
+                return;
+            }
+
             const responseHeaders = { ...upstreamResponse.headers };
 
             // 清理逐跳响应头，并修正可能指向容器回环地址的 Location。
@@ -674,7 +867,11 @@ server.on("upgrade", (clientRequest, clientSocket, head) => {
         return;
     }
 
-    const translated = translateRequestUrl(clientRequest.url, authenticated);
+    const translated = translateRequestUrl(clientRequest.url, {
+        authenticated,
+        hasSession: hasDshSession(clientRequest),
+        allowAutoInject: false,
+    });
     if (translated.tokenError) {
         clientSocket.end(
             "HTTP/1.1 503 Service Unavailable\r\n" +
