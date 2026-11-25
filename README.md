@@ -8,30 +8,70 @@
 ghcr.io/fengwenkai168/docker-debian13:latest
 ```
 
-## 快速部署
+镜像已经公开发布，**不需要登录 GHCR，也不需要输入 GitHub Token**。
 
-从 GitHub Release 下载最新的 `docker-compose.yaml`，放到宿主机任意目录。
+## 直接用 docker-compose.yaml 部署运行
 
-如果 GHCR 镜像是私有的，先登录：
+[`docker-compose.yaml`](docker-compose.yaml) 是完整的部署文件，不包含 `build` 段，也不需要本地 Dockerfile。只要宿主机安装了 Docker 和 Docker Compose，就可以直接拉取公开镜像并启动。
 
-```bash
-echo "$GHCR_TOKEN" | docker login ghcr.io -u fengwenkai168 --password-stdin
+### 1. 准备部署文件
+
+可以直接使用仓库根目录的 [`docker-compose.yaml`](docker-compose.yaml)，也可以从 GitHub Release 下载。
+
+把文件放到宿主机任意目录，例如：
+
+```text
+/opt/docker-debian13/
+└── docker-compose.yaml
 ```
 
-启动：
+### 2. 按需修改配置
+
+密码、Token、端口和数据目录都直接写在 [`docker-compose.yaml`](docker-compose.yaml) 中，不读取 `.env`。
+
+至少建议修改：
+
+```yaml
+ROOT_PASSWORD
+OPENCODE_PASSWORD
+DSH_WEB_TOKEN
+KIMI_CODE_PASSWORD
+KIMI_CODE_TOKEN
+POSTGRES_PASSWORD
+```
+
+### 3. 直接启动
 
 ```bash
+cd /opt/docker-debian13
 docker compose -f docker-compose.yaml up -d
 ```
 
-Release 附件中的 `docker-compose.yaml` 固定到该 Release 的镜像版本，不会自动跟随 `latest`。升级时下载新 Release 的部署文件覆盖旧文件，然后执行：
+如果当前目录只有这一个 Compose 文件，也可以直接执行：
+
+```bash
+docker compose up -d
+```
+
+不需要执行 `docker build`，也不需要登录 GHCR。Compose 会自动从公开仓库拉取镜像。
+
+### 4. 查看运行状态
+
+```bash
+docker compose -f docker-compose.yaml ps
+docker compose -f docker-compose.yaml logs -f dev
+```
+
+### 5. 更新镜像
+
+Release 附件中的 `docker-compose.yaml` 固定到该 Release 的语义版本，不会自动跟随 `latest`。升级时先下载新 Release 的部署文件，参考其中的 `image:` 行，把你现有文件中的镜像标签改成新版本；保留已经修改过的密码、Token 和端口，然后执行：
 
 ```bash
 docker compose -f docker-compose.yaml pull
 docker compose -f docker-compose.yaml up -d
 ```
 
-如果使用的部署文件仍然指向 `latest`（例如仓库根目录中的版本），直接执行上面两条命令即可更新到最新镜像。
+不要直接用新 Release 文件覆盖已经改过密码或端口的部署文件。如果部署文件指向 `latest`（例如仓库根目录中的版本），直接执行上面两条命令即可更新到最新镜像。
 
 ## 服务与端口
 
@@ -52,6 +92,8 @@ docker compose -f docker-compose.yaml up -d
 - IPv6 地址:端口
 
 域名需要解析到宿主机，防火墙需要放行对应端口。Docker 宿主机需要启用 IPv6 才能通过 IPv6 访问。
+
+容器健康检查会验证 Supervisor 中的六个服务、关键监听端口、PostgreSQL 就绪状态，以及 OpenCode、DSH 和 Kimi 的 HTTP 响应。`docker compose ps` 显示 `unhealthy` 时，需要查看 `supervisorctl status` 和容器日志；Docker 不会因为 `unhealthy` 自动重启容器。
 
 ## 配置方式
 
@@ -110,6 +152,8 @@ docker compose -f docker-compose.yaml exec -T dev \
 docker compose -f docker-compose.yaml exec -T dev \
   pg_restore -U postgres -d postgres --clean --if-exists < postgres.dump
 ```
+
+`--clean --if-exists` 会删除目标库中的同名对象，只应在用于恢复的空库或确认可覆盖的库上执行。
 
 如果要连同 DSH、Kimi、OpenCode 和项目文件一起迁移，必须先停止整个服务，确认 PostgreSQL 已完成正常关闭，再复制整个部署目录：
 

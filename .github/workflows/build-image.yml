@@ -35,6 +35,7 @@ on:
       - start-kimi-web.sh
       - start-postgres.sh
       - dsh-proxy.cjs
+      - healthcheck.sh
       - supervisord.conf
       - compose.yaml
       - docker-compose.yaml

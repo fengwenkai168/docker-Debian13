@@ -180,30 +180,23 @@ services:
       # 保留 host key 可以避免容器重建后 SSH 客户端提示主机指纹变化。
       - ./etc/ssh:/etc/ssh
 
-    # Docker 健康检查：定期确认 OpenCode HTTP 服务及密码认证是否正常。
-    # 该检查不覆盖 PostgreSQL、dsh、Kimi Web 和 sshd；
-    # 它们由 Supervisor 管理和自动重启，可通过 supervisorctl status
-    # 或 docker compose logs 检查状态。
+    # Docker 健康检查覆盖 Supervisor 中的全部关键服务：
+    # sshd、PostgreSQL、OpenCode、DSH、DSH 代理和 Kimi Web。
+    # 检查进程状态、监听端口、PostgreSQL 就绪状态以及实际 HTTP 响应。
+    # unhealthy 只会反映在 docker compose ps 中；Docker 不会据此自动重启容器。
     healthcheck:
       test:
-        # CMD-SHELL 表示通过容器内的 /bin/sh 执行下一条命令。
-        - CMD-SHELL
-
-        # curl 参数：-f 在 HTTP 错误时失败，-s 静默，-S 保留错误输出。
-        # -u 使用 OpenCode 的 Basic Auth，用户名为 opencode。
-        # $$ 是 Compose 的转义写法；容器实际收到的是 ${OPENCODE_PASSWORD}，
-        # 从而由容器 Shell 读取运行时密码，而不是由 Compose 在宿主机侧提前展开。
-        # 请求成功时将输出丢弃；失败时返回 1，令本次健康检查失败。
-        - curl -fsS -u "opencode:$${OPENCODE_PASSWORD}" http://127.0.0.1:49374/api/info >/dev/null || exit 1
+        - CMD
+        - /usr/local/bin/healthcheck.sh
 
       # 上一次检查结束后，每隔 30 秒再检查一次。
       interval: 30s
 
-      # 单次检查超过 10 秒即判定为失败。
-      timeout: 10s
+      # 单次检查最多允许 45 秒；脚本内部各探测还有更短的超时。
+      timeout: 45s
 
       # 连续失败 5 次后，将容器标记为 unhealthy。
       retries: 5
 
-      # 容器启动后的 30 秒为启动宽限期，期间失败不会计入连续失败次数。
-      start_period: 30s
+      # 首次 initdb 和所有服务启动可能较慢，前 180 秒的失败不计入重试次数。
+      start_period: 180s

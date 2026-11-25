@@ -191,10 +191,10 @@ fi
     echo
     echo "## 部署"
     echo
-    echo "镜像内部已包含可直接使用的部署文件：\`/opt/docker-debian13/docker-compose.yaml\`。"
-    echo "本次 GitHub Release 也附带同内容的 \`docker-compose.yaml\`。"
+    echo "镜像内部包含部署模板：\`/opt/docker-debian13/docker-compose.yaml\`，其中镜像标签为 \`latest\`。"
+    echo "本次 GitHub Release 附带的 \`docker-compose.yaml\` 已固定到本次构建的版本标签。"
     echo
-    echo "从镜像导出部署文件："
+    echo "从镜像导出最新模板："
     echo
     echo '```bash'
     echo "docker run --rm --entrypoint cat $image_name:latest \\"
@@ -208,7 +208,11 @@ fi
     echo "## 拉取镜像"
     echo
     echo '```bash'
-    echo "docker pull $image_name:latest"
+    if [[ -n "$image_version" ]]; then
+        echo "docker pull $image_name:$image_version"
+    else
+        echo "docker pull $image_name:latest"
+    fi
     echo '```'
     echo
     available_tags="\`latest\`"

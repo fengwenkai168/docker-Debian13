@@ -313,17 +313,23 @@ COPY dsh-proxy.cjs /usr/local/bin/dsh-proxy.cjs
 # 六个服务，以及日志转发和自动重启策略。
 COPY supervisord.conf /etc/supervisor/supervisord.conf
 
+# 复制全服务健康检查脚本。
+# Docker 健康检查会同时验证 Supervisor 进程状态、监听端口、
+# PostgreSQL 就绪状态以及 OpenCode、DSH 和 Kimi 的 HTTP 响应。
+COPY healthcheck.sh /usr/local/bin/healthcheck.sh
+
 # 将自包含的部署 compose 文件打包进镜像。
 # 文件已经固定使用 GHCR 镜像地址，所有密码、端口和数据目录都直接写在文件里，
 # 不读取 .env，也不需要构建时替换任何占位符。
 COPY docker-compose.yaml /opt/docker-debian13/docker-compose.yaml
 
-# 确保四个容器初始化/启动脚本都具有可执行权限。
+# 确保容器初始化、启动和健康检查脚本都具有可执行权限。
 RUN chmod 0755 \
     /usr/local/bin/docker-entrypoint.sh \
     /usr/local/bin/start-dsh-web.sh \
     /usr/local/bin/start-kimi-web.sh \
-    /usr/local/bin/start-postgres.sh
+    /usr/local/bin/start-postgres.sh \
+    /usr/local/bin/healthcheck.sh
 
 # 容器以 root 运行。
 # 启动脚本需要修改 root 密码、写入 /etc/ssh 并启动 sshd，因此需要 root 权限。

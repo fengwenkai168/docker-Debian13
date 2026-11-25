@@ -10,12 +10,15 @@
 # 如果当前目录同时存在构建用的 compose.yaml，
 # 必须用 -f docker-compose.yaml 指定本文件，否则 Docker Compose 会优先使用 compose.yaml。
 #
-# 如果 GHCR 镜像是私有的，需要先登录：
-#   echo "$GHCR_TOKEN" | docker login ghcr.io -u <GitHub用户名> --password-stdin
+# 镜像已公开发布，不需要登录 GHCR，也不需要本地构建。
+# Compose 会直接从公开镜像仓库拉取 image 指定的镜像。
 #
-# 更新到最新镜像：
-#   docker compose -f docker-compose.yaml pull
-#   docker compose -f docker-compose.yaml up -d
+# 更新镜像：
+#   本文件若使用 latest：
+#     docker compose -f docker-compose.yaml pull
+#     docker compose -f docker-compose.yaml up -d
+#   GitHub Release 附件固定到具体版本；升级时需先更新 image 标签，
+#   再执行同样的 pull/up，不要覆盖已修改的密码、Token 和端口。
 
 name: docker-debian13
 
@@ -137,15 +140,15 @@ services:
       # 保留该目录后，容器重建不会改变 SSH 主机指纹。
       - "./etc/ssh:/etc/ssh"
 
-    # 定期确认 OpenCode HTTP 服务及密码认证正常。
-    # 这里的 $$ 是 Compose 转义写法，容器内 Shell 会读取上面 environment
-    # 中设置的 OPENCODE_PASSWORD，不是从 .env 文件读取。
-    # SSH、DSH、Kimi 由容器内 Supervisor 管理并自动重启。
+    # 健康检查覆盖 Supervisor 中的全部关键服务：
+    # sshd、PostgreSQL、OpenCode、DSH、DSH 代理和 Kimi Web。
+    # 检查进程状态、监听端口、PostgreSQL 就绪状态以及实际 HTTP 响应。
+    # unhealthy 只会反映在 docker compose ps 中；Docker 不会据此自动重启容器。
     healthcheck:
       test:
-        - CMD-SHELL
-        - curl -fsS -u "opencode:$${OPENCODE_PASSWORD}" http://127.0.0.1:49374/api/info >/dev/null || exit 1
+        - CMD
+        - /usr/local/bin/healthcheck.sh
       interval: 30s
-      timeout: 10s
+      timeout: 45s
       retries: 5
-      start_period: 30s
+      start_period: 180s
