@@ -35,6 +35,10 @@ ARG DSH_VERSION=latest
 # 如果上游发布新的 latest，下一次无缓存构建会自动升级。
 ARG KIMI_CODE_VERSION=latest
 
+# Playwright npm 包版本。latest 会在每次全新构建时解析当前最新稳定版。
+# Playwright 与它下载的 Chromium 浏览器版本必须匹配，因此由同一构建步骤安装。
+ARG PLAYWRIGHT_VERSION=latest
+
 # 在同一个 RUN 中完成系统软件安装、Node.js 全局工具安装和缓存清理。
 # 这样可以避免 apt/npm 缓存被前面的镜像层保留下来，减小最终镜像体积。
 RUN sed -i 's/deb.debian.org/mirrors.aliyun.com/g; s/security.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources \
@@ -231,15 +235,29 @@ RUN mkdir -p /etc/apt/keyrings \
     && test -x /usr/lib/postgresql/16/bin/postgres
 
 # ============================================================================
-# 安装 uv 和 Playwright 官方系统依赖
+# 安装 uv、Playwright 本体和 Playwright 专用 Chromium
 # ============================================================================
 # uv 没有 Debian 13 官方包，使用 Astral 官方安装器。
-# Playwright 使用官方 install-deps 命令安装当前版本所需的 Debian 系统库。
+# Playwright 安装在独立目录 /opt/playwright，避免污染项目依赖；
+# 同时下载与 Playwright 版本配套的 Chromium 浏览器和系统依赖。
+#
+# NODE_PATH 让任意工作目录中的 CommonJS 脚本可以直接 require("playwright")；
+# PLAYWRIGHT_BROWSERS_PATH 固定浏览器安装位置，保证运行时能找到浏览器。
+ENV NODE_PATH=/opt/playwright/node_modules \
+    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+
 RUN curl -LsSf https://astral.sh/uv/install.sh \
         | env UV_INSTALL_DIR=/usr/local/bin UV_NO_MODIFY_PATH=1 sh \
     && apt-get update \
-    # 只安装 Chromium 所需系统依赖，不下载 Playwright 自带浏览器。
-    && npx --yes playwright@latest install-deps chromium \
+    # 在独立目录初始化一个 Node 项目并安装 Playwright。
+    && mkdir -p /opt/playwright /ms-playwright \
+    && (cd /opt/playwright \
+        && npm init --yes >/dev/null \
+        && npm install --omit=dev "playwright@${PLAYWRIGHT_VERSION}") \
+    # 提供全局 playwright 命令，同时保留 /opt/playwright 的模块路径。
+    && ln -sf /opt/playwright/node_modules/.bin/playwright /usr/local/bin/playwright \
+    # 下载 Playwright 专用 Chromium，并用官方 --with-deps 补齐运行库。
+    && playwright install --with-deps chromium \
     && npm cache clean --force \
     && rm -rf /var/lib/apt/lists/* \
     # 输出关键工具版本并在缺失时让构建失败。
@@ -250,6 +268,13 @@ RUN curl -LsSf https://astral.sh/uv/install.sh \
     && python3 -m venv /tmp/venv-check \
     && /tmp/venv-check/bin/python --version \
     && rm -rf /tmp/venv-check \
+    # 验证 Playwright 命令、模块和浏览器目录都存在。
+    && playwright --version \
+    && command -v playwright \
+    && test -n "$(find /ms-playwright -mindepth 1 -maxdepth 1 -type d -print -quit)" \
+    # 真正启动一次 Playwright 自带 Chromium，验证浏览器和系统依赖完整。
+    # 容器以 root 运行，Playwright 的 chromiumSandbox 默认关闭，无需手工加 --no-sandbox。
+    && node -e 'const { chromium } = require("playwright"); (async () => { const browser = await chromium.launch(); const page = await browser.newPage(); await page.setContent("<title>playwright-ok</title>"); if (await page.title() !== "playwright-ok") throw new Error("unexpected page title"); await browser.close(); console.log("Playwright Chromium launch OK"); })().catch((error) => { console.error(error); process.exit(1); });' \
     && gh --version \
     && psql --version \
     && /usr/lib/postgresql/16/bin/postgres --version \

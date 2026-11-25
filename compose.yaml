@@ -46,6 +46,9 @@ services:
         # Kimi Code CLI 的 npm latest 版本，每次构建自动解析。
         KIMI_CODE_VERSION: "latest"
 
+        # Playwright npm latest 版本；同时安装配套 Chromium 浏览器。
+        PLAYWRIGHT_VERSION: "latest"
+
     # 构建完成后赋予镜像的名称和标签。
     # 这里的 latest 只是本地镜像标签，不代表其中的工具都使用 latest 版本。
     image: docker-debian13:latest

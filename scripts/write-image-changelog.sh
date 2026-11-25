@@ -127,7 +127,7 @@ row 'Chromium' chromium --version
 row 'Chromium 中文语言包' dpkg-query -W '-f=${Version}' chromium-l10n
 row 'Noto CJK' dpkg-query -W '-f=${Version}' fonts-noto-cjk
 row 'Fontconfig' fc-list --version
-printf '| Playwright 系统依赖 | `latest install-deps` |\n'
+row 'Playwright' playwright --version
 row 'iproute2' ip -V
 row 'lsof' dpkg-query -W '-f=${Version}' lsof
 row 'strace' strace -V

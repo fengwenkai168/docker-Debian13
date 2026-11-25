@@ -204,7 +204,7 @@ docker compose -f docker-compose.yaml logs --tail=100 dev | grep -F "database sy
 | Chromium 中文语言包 | `156.0.8078.108` |
 | Noto CJK | `20240730` |
 | Fontconfig | `2.15.0` |
-| Playwright 系统依赖 | `latest install-deps` |
+| Playwright | `1.65.1` |
 | iproute2 | `6.15.0` |
 | lsof | `4.99.4` |
 | strace | `6.13` |
@@ -240,7 +240,49 @@ docker compose -f docker-compose.yaml logs --tail=100 dev | grep -F "database sy
 - GitHub CLI `gh`
 - Chromium 中文界面
 - Noto CJK 中文字体和彩色 Emoji 字体
-- Playwright Chromium 系统依赖
+- Playwright 包和 Playwright 专用 Chromium 浏览器
+
+### Playwright
+
+Playwright 本体和它管理的 Chromium 浏览器已经内置，浏览器文件位于：
+
+```text
+/ms-playwright
+```
+
+版本检查：
+
+```bash
+playwright --version
+```
+
+项目目录中可以直接通过 CommonJS 引用 Playwright：
+
+```javascript
+const { chromium } = require('playwright');
+
+(async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+  await page.goto('https://example.com');
+  await page.screenshot({ path: '/workspaces/example.png', fullPage: true });
+  await browser.close();
+})();
+```
+
+运行：
+
+```bash
+node your-playwright-script.js
+```
+
+说明：
+
+- `/usr/local/bin/playwright` 是 Playwright CLI
+- `/opt/playwright/node_modules` 通过 `NODE_PATH` 提供给项目脚本使用
+- Playwright 使用自己下载的 Chromium，不是 `/usr/bin/chromium`
+- 容器以 root 运行，Playwright 默认关闭 Chromium sandbox
+- AI 编程工具可以直接执行 `playwright` 命令或运行上述脚本
 
 ### 网络与排障
 
