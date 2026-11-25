@@ -381,6 +381,11 @@ RUN chmod 0755 \
     /usr/local/bin/start-postgres.sh \
     /usr/local/bin/healthcheck.sh
 
+# 容器以 root 运行，而 /workspaces 由宿主机用户挂载，git 会因此拒绝操作这些仓库。
+# 在系统级配置中信任 /workspaces 下的仓库，确保 OpenCode 的变更审查、快照和
+# /undo 正常工作；entrypoint 每次启动也会重新写入，这里提前写进镜像以覆盖自定义入口的场景。
+RUN git config --system --replace-all safe.directory '/workspaces/*'
+
 # 容器以 root 运行。
 # 启动脚本需要修改 root 密码、写入 /etc/ssh 并启动 sshd，因此需要 root 权限。
 # OpenCode 和 DeepSeek Harness 也直接以 root 身份操作 /workspaces，不另建用户。

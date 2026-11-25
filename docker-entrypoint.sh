@@ -40,6 +40,13 @@ mkdir -p \
     /root/.kimi-code \
     /root/.agents
 
+# 容器以 root 运行，而 /workspaces 通常由宿主机用户（例如 uid 1000）创建后挂载进来。
+# Git 会把这种“属主不是当前用户”的仓库判定为可疑所有权并直接拒绝读取，
+# 导致 OpenCode 的变更审查、快照和 /undo 等依赖 git 的功能失效。
+# 这里在系统级配置中信任 /workspaces 下的仓库；--replace-all 避免反复启动后配置项累积。
+# 如果项目挂载在 /workspaces 之外，需要把路径改成对应目录，或用 '*' 信任所有仓库。
+git config --system --replace-all safe.directory '/workspaces/*'
+
 # 镜像内置默认 AI 约束文件。
 # /workspaces 通常是宿主机 bind mount；如果宿主机目录里还没有 AGENTS.md，
 # 就把镜像模板复制进去，让 OpenCode、DSH、Kimi 等 AI 启动后能读取。

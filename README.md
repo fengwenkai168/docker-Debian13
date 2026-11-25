@@ -471,6 +471,7 @@ GitHub Release 也使用同一个语义版本。Release 附带的 `docker-compos
 - PostgreSQL 默认允许任意 IPv4/IPv6 来源使用 SCRAM 密码认证；如果不需要远程数据库访问，请收紧 `pg_hba.conf` 规则或关闭宿主机 2223 映射。
 - DeepSeek Harness 的登录密码/Token 和 Kimi 的 Token 都是长期凭证，不要在公开场所泄露。
 - 不要在不可信网络中直接暴露 AI 工具端口，它们可以执行命令并访问 root 权限下的文件。
+- 镜像默认把 `/workspaces/*` 加入 git 的 `safe.directory`，让容器内的 root 能读取宿主机用户挂载的仓库，否则 OpenCode 的变更审查、快照和 `/undo` 会失效。代价是 root 会信任这些目录中的 git 配置和钩子，所以只应挂载可信代码。
 
 ## 更新日志
 
