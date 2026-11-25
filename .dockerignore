@@ -1,0 +1,30 @@
+# .dockerignore 用于从 Docker 构建上下文中排除文件。
+# 排除后，这些目录不会随构建上下文发送给 Docker，也不能被 Dockerfile 的 COPY 使用。
+# 这样可以缩短构建准备时间、减小上下文，并避免把项目数据或密钥意外带入镜像。
+
+# Git 仓库元数据，构建本镜像不需要。
+.git
+
+# GitHub Actions 工作流只在 GitHub 上执行，不需要进入镜像构建上下文。
+.github
+
+# 构建辅助脚本只在宿主机或 Actions 运行器中执行，不复制进镜像。
+scripts
+
+# 宿主机持久化的项目工作区，运行时通过 Compose 挂载到 /workspaces。
+# 项目源码不应在构建基础环境镜像时被打包进去。
+workspaces
+
+# 持久化的 root 数据，包括 .zcode、.ssh、.dsh 和 OpenCode 配置/数据。
+# 这些内容由 Compose 在运行时挂载，且可能包含凭据，不应进入构建上下文。
+root
+
+# 持久化的 SSH 服务端配置和 host key。
+# host key 属于敏感且应唯一的身份材料，只能在容器启动时读取，不能打入镜像。
+etc
+
+# 本地 Docker Compose 环境变量文件。
+# .env 可能包含实际服务器地址，后续也可能加入 API Key 等敏感信息；
+# 镜像构建不需要它，因此排除 .env 及所有 .env.* 文件。
+.env
+.env.*

@@ -1,0 +1,22 @@
+# 运行时持久化数据，不应提交到仓库。
+/workspaces/
+/root/
+/etc/
+/ssh-box-data/
+/docker-debian13-data/
+
+# 本地环境变量和真实部署密码，不应公开。
+.env
+.env.*
+
+# GitHub Actions 本地生成的文件。
+/image-changelog.md
+/docker-compose.generated.yaml
+
+# ZCode 本地工作区元数据。
+.zcode/
+
+# 编辑器和操作系统生成文件。
+.DS_Store
+*.swp
+*.swo

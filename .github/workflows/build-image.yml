@@ -1,0 +1,270 @@
+# GitHub Actions 自动构建并发布开发容器镜像。
+#
+# 功能：
+#   1. 推送到 main/master 分支时自动构建。
+#   2. 每月 1 日和 15 日 UTC 02:00 定时重建，约每两周一次。
+#   3. 支持在 Actions 页面手动触发。
+#   4. 构建时使用 compose.yaml 的 pull/no_cache，重新获取最新基础镜像和 npm 包。
+#   5. 推送镜像到 GitHub Container Registry（GHCR）。
+#   6. 生成实际安装版本清单，写入 Actions 摘要、Artifact 和 GitHub Release。
+#   7. 把版本清单写入 README.md 的更新日志区域，并提交回默认分支。
+#
+# 生产者权限：
+#   - contents: write 用于创建 GitHub Release 和提交 README 更新。
+#   - packages: write 用于推送 ghcr.io 镜像。
+#
+# 镜像地址：
+#   ghcr.io/<GitHub 用户名或组织>/<仓库名>:latest
+#   ghcr.io/<GitHub 用户名或组织>/<仓库名>:v0.0.1
+# 语义版本从 v0.0.1 开始，每次成功构建自动递增 patch。
+# GitHub Release 也使用同一个语义版本标签。
+
+name: Build container image
+
+on:
+  # 代码或镜像构建相关文件变化时自动触发。
+  # 如果仓库默认分支不是 main/master，请在这里改成实际分支名。
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - Dockerfile
+      - docker-entrypoint.sh
+      - start-dsh-web.sh
+      - start-kimi-web.sh
+      - start-postgres.sh
+      - dsh-proxy.cjs
+      - supervisord.conf
+      - compose.yaml
+      - docker-compose.yaml
+      - .dockerignore
+      - scripts/write-image-changelog.sh
+      - scripts/update-readme-changelog.cjs
+      - .github/workflows/build-image.yml
+      # README.md 不在触发列表中：
+      # Actions 提交 README 更新时使用的是 GITHUB_TOKEN，
+      # GitHub 本身也不会因此再次触发工作流，避免循环构建。
+
+  # 每月 1 日和 15 日 UTC 02:00 自动构建，约每两周一次。
+  # GitHub Actions cron 不支持严格的“每 14 天”，因此使用每月两次实现。
+  # 想每周构建可改为：cron: "0 2 * * 1"
+  schedule:
+    - cron: "0 2 1,15 * *"
+
+  # 允许在 GitHub Actions 页面点击 “Run workflow” 手动构建。
+  workflow_dispatch:
+
+# 同一分支只保留一个正在运行的构建。
+# 不取消正在执行的构建，避免镜像或 Release 只推送了一半就被中断。
+concurrency:
+  group: container-image-${{ github.ref }}
+  cancel-in-progress: false
+
+# GitHub 默认最小权限，这里显式开启 Release 和 GHCR 推送所需权限。
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  build-and-publish:
+    # 只允许默认分支发布镜像和 Release。
+    # 即使仓库同时存在 main/master，也不会让非默认分支覆盖 latest 标签。
+    if: github.ref_name == github.event.repository.default_branch
+
+    # 使用 GitHub 托管的 Ubuntu 最新版运行器。
+    # 默认构建 linux/amd64；如需 arm64，需要额外的 QEMU/多架构构建配置。
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+
+    steps:
+      # 检出完整 Git 历史，便于后面把 README 更新 rebase 到最新默认分支。
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # GHCR 镜像名必须全部小写。
+      # GitHub 用户名/组织名可能包含大写字母，因此用 Bash 的 ,, 转换成小写。
+      # 推送地址会与 docker-compose.yaml 中固定的 GHCR 镜像地址一致。
+      - name: Set image name
+        run: echo "IMAGE_NAME=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+
+      # 计算本次构建使用的语义版本。
+      # - 第一次构建没有 v* 标签时使用 v0.0.1。
+      # - 后续构建查找远端最大的纯语义版本标签，并递增 patch。
+      # - 例如 v0.0.1 -> v0.0.2 -> v0.0.3。
+      # - 只匹配 vMAJOR.MINOR.PATCH，不会误匹配带后缀的临时标签。
+      # - 版本表、Release、README 更新日志和镜像标签共用这个值。
+      - name: Calculate semantic version
+        id: version
+        run: |
+          git fetch --tags --force origin
+
+          latest_tag="$(
+            git tag --list 'v*' \
+              | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+              | sort -V \
+              | tail -n 1 \
+              || true
+          )"
+
+          if [[ -z "$latest_tag" ]]; then
+            app_version="v0.0.1"
+          else
+            core="${latest_tag#v}"
+            IFS='.' read -r major minor patch <<< "$core"
+            if ! [[ "$major" =~ ^[0-9]+$ && "$minor" =~ ^[0-9]+$ && "$patch" =~ ^[0-9]+$ ]]; then
+              echo "无法解析现有语义版本标签: $latest_tag" >&2
+              exit 1
+            fi
+            app_version="v${major}.${minor}.$((patch + 1))"
+          fi
+
+          echo "APP_VERSION=$app_version" >> "$GITHUB_ENV"
+          echo "app_version=$app_version" >> "$GITHUB_OUTPUT"
+          echo "本次构建版本: $app_version"
+
+      # 使用 compose.yaml 构建，避免在 Workflow 中重复维护 Dockerfile 构建参数。
+      # compose.yaml 已设置 build.pull=true 和 build.no_cache=true：
+      # - 先拉取最新 node:24-trixie 基础镜像；
+      # - 不复用构建缓存，重新解析 npm 11、pnpm 11、OpenCode v2、DSH 和 Kimi latest。
+      - name: Build image with latest versions
+        run: docker compose build dev
+
+      # 从 compose 配置中读取构建出的本地镜像名，不重复写死镜像标签。
+      # 生成两个标签：
+      # - latest：供普通部署直接拉取；
+      # - vX.Y.Z：本次构建对应的不可变语义版本。
+      - name: Tag image
+        run: |
+          local_image="$(docker compose config --images | head -n 1)"
+          if [[ -z "$local_image" ]]; then
+            echo "无法从 compose.yaml 获取镜像名称" >&2
+            exit 1
+          fi
+          echo "LOCAL_IMAGE=$local_image" >> "$GITHUB_ENV"
+          docker tag "$local_image" "$IMAGE_NAME:latest"
+          docker tag "$local_image" "$IMAGE_NAME:${APP_VERSION}"
+
+      # 从构建好的镜像中导出部署 compose 模板，并把镜像地址固定到本次构建。
+      # 仓库内的 docker-compose.yaml 仍使用 latest；Release 附件使用
+      # 当前仓库的镜像名和本次语义版本，保证下载某个 Release 后部署的就是该版本。
+      - name: Extract deployment compose file
+        run: |
+          : "${IMAGE_NAME:?IMAGE_NAME 未设置}"
+          : "${APP_VERSION:?APP_VERSION 未设置}"
+
+          docker run --rm --entrypoint cat "$LOCAL_IMAGE" \
+            /opt/docker-debian13/docker-compose.yaml > docker-compose.yaml
+          test -s docker-compose.yaml
+
+          sed -i -E \
+            "s|^([[:space:]]*)image:.*$|\1image: ${IMAGE_NAME}:${APP_VERSION}|" \
+            docker-compose.yaml
+
+          image_lines="$(grep -cE '^[[:space:]]+image:' docker-compose.yaml || true)"
+          if [[ "$image_lines" -ne 1 ]]; then
+            echo "错误：部署文件应恰好包含一个 image 字段，实际为 $image_lines 个。" >&2
+            exit 1
+          fi
+
+          expected_image="image: ${IMAGE_NAME}:${APP_VERSION}"
+          if ! grep -Fq "$expected_image" docker-compose.yaml; then
+            echo "错误：部署文件没有固定到 ${IMAGE_NAME}:${APP_VERSION}。" >&2
+            exit 1
+          fi
+
+          if grep -Eq '^[[:space:]]+image:.*:latest$' docker-compose.yaml; then
+            echo "错误：Release 部署文件仍在使用 latest 标签。" >&2
+            exit 1
+          fi
+
+      # 生成更新日志。
+      # 脚本会启动一个临时容器，绕过服务入口，只执行各工具的 --version，
+      # 因此不会启动 SSH/PostgreSQL/OpenCode/DSH/Kimi，也不需要使用密码。
+      - name: Generate version changelog
+        env:
+          APP_VERSION: ${{ steps.version.outputs.app_version }}
+        run: bash scripts/write-image-changelog.sh "$LOCAL_IMAGE" image-changelog.md
+
+      # 把本次构建信息和实际版本清单插入 README 的更新日志区域。
+      # 使用语义版本避免重复；旧构建记录保留在下方。
+      - name: Update README changelog
+        env:
+          RELEASE_TAG: ${{ steps.version.outputs.app_version }}
+        run: |
+          node scripts/update-readme-changelog.cjs \
+            image-changelog.md README.md "$RELEASE_TAG"
+
+      # 登录 GHCR。GITHUB_TOKEN 由 Actions 自动提供，不需要手动创建 Token。
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # 依次推送 latest 和语义版本标签。
+      - name: Push image to GHCR
+        run: |
+          docker push "$IMAGE_NAME:latest"
+          docker push "$IMAGE_NAME:${APP_VERSION}"
+
+      # 镜像推送成功后，立即创建并推送 Git 语义版本标签。
+      # 后续 Release 直接使用这个已存在的标签。
+      # 如果本步骤失败，下一次构建会重新计算并复用未成功发布的版本号。
+      - name: Create semantic version tag
+        run: |
+          git tag "$APP_VERSION"
+          git push origin "$APP_VERSION"
+
+      # 在 Actions 运行摘要页面直接展示版本更新日志。
+      - name: Publish changelog to job summary
+        run: cat image-changelog.md >> "$GITHUB_STEP_SUMMARY"
+
+      # 保留更新日志为构建 Artifact，便于之后下载和审计。
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-files-${{ github.run_number }}-${{ github.run_attempt }}
+          path: |
+            image-changelog.md
+            docker-compose.yaml
+          if-no-files-found: error
+
+      # 每次构建创建语义版本 Release，并把版本清单和可部署 compose 作为附件。
+      # docker-compose.yaml 已内置实际 GHCR 镜像地址，可直接复制到任意宿主机使用。
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.app_version }}
+          name: Container image ${{ steps.version.outputs.app_version }}
+          body_path: image-changelog.md
+          files: |
+            image-changelog.md
+            docker-compose.yaml
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      # 把 README 更新提交回默认分支。
+      # - [skip ci] 是额外保护，避免其他工作流因文档提交被触发。
+      # - 先用 fetch + rebase 合入构建期间可能出现的其他人提交，减少 push 冲突。
+      # - 如果仓库启用了“禁止直接 push 默认分支”的分支保护，此步骤会失败，
+      #   需要调整保护规则或改成自动创建 Pull Request。
+      - name: Commit README changelog
+        env:
+          RELEASE_TAG: ${{ steps.version.outputs.app_version }}
+        run: |
+          if git diff --quiet -- README.md; then
+            echo "README.md 没有变化，跳过提交。"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md
+          git commit -m "docs: update build changelog ${RELEASE_TAG} [skip ci]"
+
+          git fetch origin "${GITHUB_REF_NAME}"
+          git rebase "origin/${GITHUB_REF_NAME}"
+          git push origin "HEAD:${GITHUB_REF_NAME}"

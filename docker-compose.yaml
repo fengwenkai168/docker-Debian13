@@ -1,0 +1,151 @@
+# 开发容器“部署版” Docker Compose 文件。
+#
+# 这个文件会被打包进镜像的 /opt/docker-debian13/docker-compose.yaml。
+# 它不包含 build 段，只负责从 GHCR 拉取已经构建好的镜像。
+#
+# 重要：本文件不依赖 .env，所有配置都直接写在这里。
+# 需要修改密码、端口或数据目录时，直接编辑本文件后重新执行：
+#   docker compose -f docker-compose.yaml up -d
+#
+# 如果当前目录同时存在构建用的 compose.yaml，
+# 必须用 -f docker-compose.yaml 指定本文件，否则 Docker Compose 会优先使用 compose.yaml。
+#
+# 如果 GHCR 镜像是私有的，需要先登录：
+#   echo "$GHCR_TOKEN" | docker login ghcr.io -u <GitHub用户名> --password-stdin
+#
+# 更新到最新镜像：
+#   docker compose -f docker-compose.yaml pull
+#   docker compose -f docker-compose.yaml up -d
+
+name: docker-debian13
+
+services:
+  dev:
+    # GitHub Actions 构建并推送到这个仓库的镜像。
+    # GHCR 镜像名必须全部小写。
+    image: ghcr.io/fengwenkai168/docker-debian13:latest
+
+    # 固定容器名称，便于 docker logs/exec 和后续管理。
+    # 同一宿主机不能同时运行两个同名容器。
+    container_name: docker-debian13
+
+    # 容器退出或 Docker 重启后自动恢复；手动 docker compose stop 的除外。
+    restart: unless-stopped
+
+    # Docker 停止容器时先发送 SIGTERM，超过此时间仍未退出才发送 SIGKILL。
+    # Supervisor 依次停止六个子服务，其中 PostgreSQL 最多等待 60 秒，
+    # 其余服务使用默认等待时间；180 秒应大于容器内停止流程的最坏耗时。
+    stop_grace_period: 180s
+
+    # 端口映射格式为“宿主机端口:容器端口”。
+    # 需要修改宿主机端口时，直接修改每行冒号左边的数字。
+    # 不指定 host_ip 时，Docker 会在支持的宿主机上同时监听 IPv4 和 IPv6，
+    # 因此 127.0.0.1、局域网/公网 IPv4、域名和 IPv6 都可访问。
+    # 域名能否访问还取决于 DNS 是否解析到该宿主机，以及防火墙是否放行端口。
+    ports:
+      # SSH：ssh -p 2222 root@宿主机IP
+      - "2222:22"
+
+      # 预留给应用程序开发服务；容器内服务需监听 0.0.0.0。
+      - "2001-2005:2001-2005"
+
+      # PostgreSQL 16：宿主机端口 2223 映射到容器内 5432。
+      # 可从 127.0.0.1:2223、局域网/公网 IP:2223、域名:2223 或 IPv6:2223 访问。
+      - "2223:5432"
+
+      # DeepSeek Harness Web：宿主机 2224 → 容器 3080。
+      - "2224:3080"
+
+      # OpenCode Web：宿主机 2225 → 容器 49374。
+      - "2225:49374"
+
+      # Kimi Code Web：宿主机 2226 → 容器 58627。
+      - "2226:58627"
+
+    # 所有运行时配置直接写在这里，不读取 .env 文件。
+    environment:
+      # SSH root 密码。部署前请直接修改此值。
+      ROOT_PASSWORD: "123456"
+
+      # PostgreSQL 16 数据库超级用户。
+      POSTGRES_USER: "postgres"
+
+      # PostgreSQL 16 超级用户密码，只在数据目录首次初始化时生效。
+      # 已有数据库后修改此值不会改变密码，需要用 ALTER ROLE 修改。
+      POSTGRES_PASSWORD: "postgres-123456"
+
+      # OpenCode Web 密码，登录用户名为 opencode。
+      OPENCODE_PASSWORD: "123456"
+
+      # DeepSeek Harness 登录链接中显示的地址。
+      # 它不限制浏览器访问地址；用服务器 IP 访问时可改为：
+      # DSH_PUBLIC_URL: "http://192.168.1.10:2224"
+      DSH_PUBLIC_URL: "http://localhost:2224"
+
+      # DeepSeek Harness 固定登录 token。
+      # 登录地址：http://任意IP或域名:2224/?token=dsh-token-123456
+      DSH_WEB_TOKEN: "dsh-token-123456"
+
+      # Kimi Code 数据根目录，必须与下面的持久化挂载路径一致。
+      KIMI_CODE_HOME: "/root/.kimi-code"
+
+      # Kimi Code Web 的额外访问密码，与 bearer token 一起使用。
+      KIMI_CODE_PASSWORD: "123456"
+
+      # Kimi Code 固定 bearer token。
+      # 登录地址：http://任意IP或域名:2226/#token=kimi-token-123456
+      KIMI_CODE_TOKEN: "kimi-token-123456"
+
+      # 关闭 Kimi 的 DNS 重绑定 Host 白名单检查。
+      # 这样 127.0.0.1、局域网 IP、公网 IP、任意域名和 IPv6 都可以访问。
+      # Kimi 的 bearer token 和 KIMI_CODE_PASSWORD 认证仍然有效。
+      KIMI_CODE_DISABLE_HOST_CHECK: "1"
+
+    # 所有持久化目录都相对于本 compose 文件所在目录：
+    # - ./workspaces：项目代码
+    # - ./root：ZCode、SSH、PostgreSQL、DSH、Kimi、OpenCode 数据
+    # - ./etc/ssh：SSH 服务端配置和 host key
+    # 迁移时不要复制正在运行的数据目录：先执行 docker compose stop，
+    # 确认 PostgreSQL 已正常关闭；数据库也可使用 pg_dump 单独备份。
+    # 部署目录包含 SSH host key 和凭据，复制件应按敏感数据保管。
+    volumes:
+      # 项目代码和开发产物。
+      - "./workspaces:/workspaces"
+
+      # ZCode 配置、会话、技能和工具链。
+      - "./root/.zcode:/root/.zcode"
+
+      # SSH 客户端配置与 authorized_keys。
+      - "./root/.ssh:/root/.ssh"
+
+      # PostgreSQL 16 数据目录。首次启动自动 initdb，后续容器重建继续使用。
+      - "./root/postgresql/data:/var/lib/postgresql/data"
+
+      # DeepSeek Harness 配置、登录凭据和会话。
+      - "./root/.dsh:/root/.dsh"
+
+      # Kimi Code 配置、登录凭据、会话和持久化 server.token。
+      - "./root/.kimi-code:/root/.kimi-code"
+
+      # OpenCode 配置文件。
+      - "./root/.config/opencode:/root/.config/opencode"
+
+      # OpenCode 会话、项目及集成数据。
+      - "./root/.local/share/opencode:/root/.local/share/opencode"
+
+      # SSH 服务端配置和 host key。
+      # 保留该目录后，容器重建不会改变 SSH 主机指纹。
+      - "./etc/ssh:/etc/ssh"
+
+    # 定期确认 OpenCode HTTP 服务及密码认证正常。
+    # 这里的 $$ 是 Compose 转义写法，容器内 Shell 会读取上面 environment
+    # 中设置的 OPENCODE_PASSWORD，不是从 .env 文件读取。
+    # SSH、DSH、Kimi 由容器内 Supervisor 管理并自动重启。
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - curl -fsS -u "opencode:$${OPENCODE_PASSWORD}" http://127.0.0.1:49374/api/info >/dev/null || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s

@@ -1,0 +1,209 @@
+# Docker Compose 服务定义文件。
+# 常用命令：
+#   docker compose up -d --build   构建镜像并在后台启动容器
+#   docker compose ps              查看容器及健康检查状态
+#   docker compose logs -f dev     持续查看 SSH、OpenCode、dsh 和 Kimi Web 日志
+#   docker compose down            停止并删除容器，但保留下面挂载的宿主机目录
+
+services:
+  # 定义名为 dev 的开发环境服务。
+  # docker compose exec/logs 等命令可以通过 dev 指定这个服务。
+  dev:
+    # build 告诉 Compose：启动前使用当前目录中的 Dockerfile 构建镜像。
+    build:
+      # 构建上下文为 compose.yaml 所在目录。
+      # Dockerfile 中的 COPY 只能访问这个上下文内、且未被 .dockerignore 排除的文件。
+      context: .
+
+      # 每次构建都尝试拉取基础镜像的最新版本。
+      # node:24-trixie 是浮动标签，因此可以取得 Node.js 24 的最新补丁版本。
+      pull: true
+
+      # 禁用 Docker 构建缓存。
+      # 这会让每次 docker compose up --build 都重新执行 apt 和 npm 安装，
+      # 从而获取 npm 11、pnpm 11、OpenCode v2、DSH、Kimi 的最新版本。
+      # 代价是每次构建更慢，并且必须联网。
+      no_cache: true
+
+      # 这些值会传递给 Dockerfile 中同名的 ARG，仅在构建镜像时使用。
+      args:
+        # Node.js 主版本 24；配合 build.pull 使用最新 24.x。
+        NODE_VERSION: "24"
+
+        # npm 11 系列的最新版本；不指定具体补丁号，每次构建自动解析。
+        NPM_VERSION: "11"
+
+        # 要求 pnpm >= 11.11 且保持 11.x；每次构建解析 11 系列最新版。
+        # 当前会安装 pnpm 11.29.0。
+        PNPM_VERSION: "^11.11.0"
+
+        # OpenCode 主版本 2，每次构建获取 v2 系列最新版本。
+        OPENCODE_VERSION: "2"
+
+        # DeepSeek Harness 的 npm latest 版本，每次构建自动解析。
+        DSH_VERSION: "latest"
+
+        # Kimi Code CLI 的 npm latest 版本，每次构建自动解析。
+        KIMI_CODE_VERSION: "latest"
+
+    # 构建完成后赋予镜像的名称和标签。
+    # 这里的 latest 只是本地镜像标签，不代表其中的工具都使用 latest 版本。
+    image: docker-debian13:latest
+
+    # 固定容器名称，便于使用 docker exec/logs 等 Docker 命令操作。
+    # 同一台 Docker 主机上不能同时存在另一个同名容器。
+    container_name: docker-debian13
+
+    # 除非用户手动停止，否则容器退出或 Docker 服务重启后会自动启动。
+    # Supervisor 负责容器内服务的重启，restart 负责整个容器的重启。
+    restart: unless-stopped
+
+    # Docker 停止容器时先发送 SIGTERM，超过此时间仍未退出才发送 SIGKILL。
+    # Supervisor 依次停止六个子服务，其中 PostgreSQL 最多等待 60 秒，
+    # 其余服务使用默认等待时间；180 秒应大于容器内停止流程的最坏耗时。
+    stop_grace_period: 180s
+
+    # 端口映射格式为“宿主机端口:容器端口”。
+    # 未指定宿主机 IP 时，默认监听宿主机所有网卡；公网服务器应配置防火墙。
+    ports:
+      # 通过 ssh -p 2222 root@服务器IP 登录容器内的 SSH 服务。
+      - "2222:22"
+
+      # 为 NocoBase 等开发服务预留 2001 至 2005 端口。
+      # 容器内对应服务必须监听 0.0.0.0，才能通过宿主机访问。
+      - "2001-2005:2001-2005"
+
+      # PostgreSQL 16：宿主机端口 2223 映射到容器内 5432。
+      # 可从 127.0.0.1:2223、局域网/公网 IP:2223、域名:2223 或 IPv6:2223 连接。
+      - "2223:5432"
+
+      # DeepSeek Harness Web：宿主机 2224 映射到容器内 3080。
+      # 容器内的 dsh-proxy 监听 0.0.0.0:3080，
+      # 把 Host 改写为 127.0.0.1:3081 后转发给内部 dsh。
+      # 浏览器访问 http://任意IP或域名:2224/?token=...
+      # 该端口会监听宿主机所有网卡，不要无保护地直接暴露到公网。
+      - "2224:3080"
+
+      # OpenCode Web：宿主机 2225 映射到容器内 49374。
+      # 浏览器访问 http://任意IP或域名:2225/
+      - "2225:49374"
+
+      # Kimi Code Web：宿主机 2226 映射到容器内 58627。
+      # 浏览器访问 http://任意IP或域名:2226/#token=...
+      - "2226:58627"
+
+    # environment 中的值在容器运行时传入，不会固化到 Dockerfile 的构建命令中。
+    # 但这些值仍可通过 docker inspect 查看，不能当作高安全性的密钥存储方案。
+    environment:
+      # SSH root 登录密码。
+      # 默认弱密码仅供本地测试，暴露到公网前必须修改为强密码。
+      ROOT_PASSWORD: "123456"
+
+      # PostgreSQL 16 的数据库超级用户。
+      # 只在数据目录首次初始化时生效；已有数据后修改不会改变密码。
+      POSTGRES_USER: "postgres"
+
+      # PostgreSQL 16 超级用户密码，只在首次初始化时写入数据库。
+      # 默认弱密码仅供本地测试，暴露到公网前必须修改为强密码。
+      POSTGRES_PASSWORD: "postgres-123456"
+
+      # OpenCode Web 的访问密码，Basic Auth 登录用户名为 opencode。
+      # opencode serve 会继承此环境变量；修改后需要重新创建容器。
+      OPENCODE_PASSWORD: "123456"
+
+      # DeepSeek Harness 的唯一数据根目录。
+      # profiles、settings.yaml、凭据和会话等数据都保存到该目录下。
+      DSH_HOME: "/root/.dsh"
+
+      # 只影响 dsh 启动日志中打印的登录链接，不限制访问地址。
+      # dsh-proxy 会改写 Host/Origin，因此任意 IP 或域名都能访问宿主机 2224。
+      # 默认 localhost 方便本机登录；远程访问时可直接修改本值
+      # 或设置 DSH_PUBLIC_URL 环境变量，让日志里的登录链接直接可用。
+      # 不设置此变量也能从任何地址访问，只需把日志链接里的 localhost 替换掉。
+      DSH_PUBLIC_URL: "${DSH_PUBLIC_URL:-http://localhost:2224}"
+
+      # DeepSeek Harness 固定登录 token。
+      # 登录地址：http://任意IP或域名:2224/?token=dsh-token-123456
+      # 每次构建/启动不需要查看日志中的随机 token。
+      DSH_WEB_TOKEN: "dsh-token-123456"
+
+      # Kimi Code 的持久化数据根目录。
+      # config.toml、登录凭据、会话、日志和 server.token 都保存在这里。
+      KIMI_CODE_HOME: "/root/.kimi-code"
+
+      # Kimi Web 的额外访问密码，与 bearer token 一起使用。
+      # 默认弱密码仅供本地测试，公网或不可信局域网使用前必须修改。
+      # 可直接修改本值，或通过 KIMI_CODE_PASSWORD 环境变量覆盖。
+      KIMI_CODE_PASSWORD: "${KIMI_CODE_PASSWORD:-123456}"
+
+      # Kimi Code 固定 bearer token。
+      # 登录地址：http://任意IP或域名:2226/#token=kimi-token-123456
+      # 启动脚本会把它写入 /root/.kimi-code/server.token。
+      KIMI_CODE_TOKEN: "kimi-token-123456"
+
+      # 关闭 Kimi 的 DNS 重绑定 Host 白名单检查，
+      # 允许 localhost、局域网 IP、公网 IP、域名和 IPv6 字面量直接访问。
+      # 这不会关闭 Kimi 的 bearer token 和 KIMI_CODE_PASSWORD 认证。
+      KIMI_CODE_DISABLE_HOST_CHECK: "1"
+
+    # 持久化挂载格式为“宿主机相对路径:容器内绝对路径”。
+    # 相对路径以 compose.yaml 所在目录为基准。
+    # 容器删除或重建后，这些目录中的数据仍会保留。
+    volumes:
+      # 项目代码和开发产物。
+      - ./workspaces:/workspaces
+
+      # ZCode 的配置、会话、技能和工具链。
+      - ./root/.zcode:/root/.zcode
+
+      # root 的 SSH 客户端配置及 authorized_keys 等文件。
+      - ./root/.ssh:/root/.ssh
+
+      # PostgreSQL 16 数据目录。首次启动自动 initdb，容器重建后数据保留。
+      - ./root/postgresql/data:/var/lib/postgresql/data
+
+      # DeepSeek Harness 的 profiles、设置、登录凭据和会话数据。
+      # 不挂载时容器重建会要求重新配置模型 API Key 和登录状态。
+      - ./root/.dsh:/root/.dsh
+
+      # Kimi Code 的配置、登录凭据、会话、日志和持久化 token。
+      # 不挂载时容器重建会丢失 Kimi 登录状态和全部 Web 会话。
+      - ./root/.kimi-code:/root/.kimi-code
+
+      # OpenCode 配置文件，避免重建容器后丢失自定义配置。
+      - ./root/.config/opencode:/root/.config/opencode
+
+      # OpenCode 的会话、项目及集成凭据等本地数据。
+      - ./root/.local/share/opencode:/root/.local/share/opencode
+
+      # SSH 服务端配置和 host key。
+      # 保留 host key 可以避免容器重建后 SSH 客户端提示主机指纹变化。
+      - ./etc/ssh:/etc/ssh
+
+    # Docker 健康检查：定期确认 OpenCode HTTP 服务及密码认证是否正常。
+    # 该检查不覆盖 PostgreSQL、dsh、Kimi Web 和 sshd；
+    # 它们由 Supervisor 管理和自动重启，可通过 supervisorctl status
+    # 或 docker compose logs 检查状态。
+    healthcheck:
+      test:
+        # CMD-SHELL 表示通过容器内的 /bin/sh 执行下一条命令。
+        - CMD-SHELL
+
+        # curl 参数：-f 在 HTTP 错误时失败，-s 静默，-S 保留错误输出。
+        # -u 使用 OpenCode 的 Basic Auth，用户名为 opencode。
+        # $$ 是 Compose 的转义写法；容器实际收到的是 ${OPENCODE_PASSWORD}，
+        # 从而由容器 Shell 读取运行时密码，而不是由 Compose 在宿主机侧提前展开。
+        # 请求成功时将输出丢弃；失败时返回 1，令本次健康检查失败。
+        - curl -fsS -u "opencode:$${OPENCODE_PASSWORD}" http://127.0.0.1:49374/api/info >/dev/null || exit 1
+
+      # 上一次检查结束后，每隔 30 秒再检查一次。
+      interval: 30s
+
+      # 单次检查超过 10 秒即判定为失败。
+      timeout: 10s
+
+      # 连续失败 5 次后，将容器标记为 unhealthy。
+      retries: 5
+
+      # 容器启动后的 30 秒为启动宽限期，期间失败不会计入连续失败次数。
+      start_period: 30s
