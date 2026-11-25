@@ -29,6 +29,7 @@ printf 'root:%s\n' "$ROOT_PASSWORD" | chpasswd
 # /root/.local/share/opencode：OpenCode 会话、项目和集成数据目录。
 # /root/.dsh：DeepSeek Harness 的唯一数据根目录，包括 profiles、设置和凭据。
 # /root/.kimi-code：Kimi Code 的配置、登录凭据、会话、日志和 server.token。
+# /root/.agents：OpenCode、DSH、Kimi、ZCode 共用技能目录和 skills CLI 账本。
 # 所有服务仍然以 root 运行，不会创建 dsh、kimi 或其他额外 Linux 用户。
 mkdir -p \
     /run/sshd \
@@ -36,7 +37,8 @@ mkdir -p \
     /root/.config/opencode \
     /root/.local/share/opencode \
     /root/.dsh \
-    /root/.kimi-code
+    /root/.kimi-code \
+    /root/.agents
 
 # 镜像内置默认 AI 约束文件。
 # /workspaces 通常是宿主机 bind mount；如果宿主机目录里还没有 AGENTS.md，

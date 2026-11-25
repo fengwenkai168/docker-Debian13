@@ -35,6 +35,7 @@ ghcr.io/fengwenkai168/docker-debian13:latest
 ROOT_PASSWORD
 OPENCODE_PASSWORD
 DSH_WEB_TOKEN
+DSH_WEB_PASSWORD
 KIMI_CODE_PASSWORD
 KIMI_CODE_TOKEN
 POSTGRES_PASSWORD
@@ -79,10 +80,12 @@ docker compose -f docker-compose.yaml up -d
 |---|---:|---|
 | SSH | 2222 | 用户 `root`，密码 `ROOT_PASSWORD` |
 | 开发服务预留 | 2001-2005 | 项目自行监听 `0.0.0.0` |
-| DeepSeek Harness Web | 2224 | `http://地址:2224/?token=dsh-token-123456` |
+| DeepSeek Harness Web | 2224 | 直接打开 `http://地址:2224/`，输入 `DSH_WEB_PASSWORD` 或 `DSH_WEB_TOKEN`；也兼容旧的 `?token=...` 链接 |
 | PostgreSQL 16 | 2223 | 用户 `postgres`，密码 `postgres-123456`，数据库 `postgres` |
 | OpenCode Web | 2225 | 用户 `opencode`，密码 `OPENCODE_PASSWORD` |
 | Kimi Code Web | 2226 | `http://地址:2226/#token=kimi-token-123456`，另需 `KIMI_CODE_PASSWORD` |
+
+DeepSeek Harness 直接打开端口会显示代理登录页，登录成功后使用签名 Cookie，浏览器地址栏不再显示 token。旧的 `http://地址:2224/?token=...` 链接仍然可用。
 
 所有端口都支持：
 
@@ -111,6 +114,7 @@ docker compose -f docker-compose.yaml up -d
 ROOT_PASSWORD
 OPENCODE_PASSWORD
 DSH_WEB_TOKEN
+DSH_WEB_PASSWORD
 KIMI_CODE_TOKEN
 KIMI_CODE_PASSWORD
 POSTGRES_USER
@@ -150,7 +154,8 @@ POSTGRES_PASSWORD
 | 宿主机目录 | 内容 |
 |---|---|
 | `./workspaces` | 项目代码和开发产物 |
-| `./root/.zcode` | ZCode 配置、会话和工具链 |
+| `./root/.zcode` | ZCode 配置、会话、技能和工具链 |
+| `./root/.agents` | OpenCode、DSH、Kimi、ZCode 共用技能目录和 skills CLI 账本 |
 | `./root/.ssh` | SSH 客户端配置 |
 | `./root/postgresql/data` | PostgreSQL 16 数据 |
 | `./root/.dsh` | DeepSeek Harness 配置和会话 |
@@ -179,7 +184,7 @@ docker compose -f docker-compose.yaml exec -T dev \
 
 `--clean --if-exists` 会删除目标库中的同名对象，只应在用于恢复的空库或确认可覆盖的库上执行。
 
-如果要连同 DSH、Kimi、OpenCode 和项目文件一起迁移，必须先停止整个服务，确认 PostgreSQL 已完成正常关闭，再复制整个部署目录：
+如果要连同 DSH、Kimi、OpenCode、共用技能和项目文件一起迁移，必须先停止整个服务，确认 PostgreSQL 已完成正常关闭，再复制整个部署目录：
 
 ```bash
 docker compose -f docker-compose.yaml stop
@@ -464,7 +469,7 @@ GitHub Release 也使用同一个语义版本。Release 附带的 `docker-compos
 - Playwright 使用的 Chromium 在 root 下默认关闭 sandbox，只用于可信的自动化任务，不要用它浏览不可信网页。
 - PostgreSQL 宿主机 2223（容器 5432）、SSH 2222、OpenCode 2225（容器 49374）、Kimi 2226（容器 58627）、DSH 2224（容器 3080）默认监听所有网卡，公网部署必须修改默认密码并限制防火墙。
 - PostgreSQL 默认允许任意 IPv4/IPv6 来源使用 SCRAM 密码认证；如果不需要远程数据库访问，请收紧 `pg_hba.conf` 规则或关闭宿主机 2223 映射。
-- DeepSeek Harness 和 Kimi 使用固定 Token 时，Token 是长期凭证，不要在公开场所泄露。
+- DeepSeek Harness 的登录密码/Token 和 Kimi 的 Token 都是长期凭证，不要在公开场所泄露。
 - 不要在不可信网络中直接暴露 AI 工具端口，它们可以执行命令并访问 root 权限下的文件。
 
 ## 更新日志

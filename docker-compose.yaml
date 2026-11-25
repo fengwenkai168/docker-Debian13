@@ -89,6 +89,12 @@ services:
       # 登录地址：http://任意IP或域名:2224/?token=dsh-token-123456
       DSH_WEB_TOKEN: "dsh-token-123456"
 
+      # DeepSeek Harness 登录页密码。
+      # 直接访问 http://任意IP或域名:2224/ 时输入此密码，
+      # 也可以输入上面的 DSH_WEB_TOKEN；登录后地址栏不带 token。
+      # 公网部署前必须修改为强密码。
+      DSH_WEB_PASSWORD: "123456"
+
       # Kimi Code 数据根目录，必须与下面的持久化挂载路径一致。
       KIMI_CODE_HOME: "/root/.kimi-code"
 
@@ -106,7 +112,7 @@ services:
 
     # 所有持久化目录都相对于本 compose 文件所在目录：
     # - ./workspaces：项目代码
-    # - ./root：ZCode、SSH、PostgreSQL、DSH、Kimi、OpenCode 数据
+    # - ./root：ZCode、SSH、PostgreSQL、DSH、Kimi、OpenCode 数据和共用技能
     # - ./etc/ssh：SSH 服务端配置和 host key
     # 迁移时不要复制正在运行的数据目录：先执行 docker compose stop，
     # 确认 PostgreSQL 已正常关闭；数据库也可使用 pg_dump 单独备份。
@@ -117,6 +123,9 @@ services:
 
       # ZCode 配置、会话、技能和工具链。
       - "./root/.zcode:/root/.zcode"
+
+      # OpenCode、DSH、Kimi、ZCode 共用技能目录和 skills CLI 账本。
+      - "./root/.agents:/root/.agents"
 
       # SSH 客户端配置与 authorized_keys。
       - "./root/.ssh:/root/.ssh"

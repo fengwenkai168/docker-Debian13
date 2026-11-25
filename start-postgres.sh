@@ -109,16 +109,18 @@ if [[ ! -s "$pgdata/PG_VERSION" ]]; then
     echo "检测到空数据目录，开始初始化 PostgreSQL 16..."
 
     # 通过临时密码文件传递密码，避免密码出现在进程命令行和 docker ps 中。
-    # 文件只允许 postgres 用户读取，初始化完成后立即删除。
+    # 必须先由 root 写入，再把文件所有者改为 postgres。
+    # 不能先 chown 再写：部分宿主机启用 fs.protected_regular=2 时，
+    # root 向 /tmp 中属于 postgres 的 sticky 临时文件写入会报“权限不够”。
     password_file="$(mktemp /tmp/postgres-password.XXXXXX)"
     cleanup_password_file() {
         rm -f "$password_file"
     }
     trap cleanup_password_file EXIT
 
+    printf '%s\n' "$POSTGRES_PASSWORD" > "$password_file"
     chown postgres:postgres "$password_file"
     chmod 600 "$password_file"
-    printf '%s\n' "$POSTGRES_PASSWORD" > "$password_file"
 
     # 以 postgres 用户运行 initdb：
     # - UTF8：统一数据库编码。

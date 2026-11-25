@@ -133,6 +133,12 @@ services:
       # 每次构建/启动不需要查看日志中的随机 token。
       DSH_WEB_TOKEN: "dsh-token-123456"
 
+      # DeepSeek Harness 登录页密码。
+      # 直接访问 http://任意IP或域名:2224/ 时输入此密码，
+      # 也可以输入上面的 DSH_WEB_TOKEN；登录后地址栏不带 token。
+      # 默认弱密码仅供本地测试，公网部署前必须修改。
+      DSH_WEB_PASSWORD: "123456"
+
       # Kimi Code 的持久化数据根目录。
       # config.toml、登录凭据、会话、日志和 server.token 都保存在这里。
       KIMI_CODE_HOME: "/root/.kimi-code"
@@ -161,6 +167,9 @@ services:
 
       # ZCode 的配置、会话、技能和工具链。
       - ./root/.zcode:/root/.zcode
+
+      # OpenCode、DSH、Kimi、ZCode 共用技能目录和 skills CLI 账本。
+      - ./root/.agents:/root/.agents
 
       # root 的 SSH 客户端配置及 authorized_keys 等文件。
       - ./root/.ssh:/root/.ssh

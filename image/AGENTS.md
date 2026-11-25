@@ -76,8 +76,9 @@ AI 不要直接在运行中的容器里修改这些内容后宣称完成。AI �
 ```text
 /workspaces
 /root/.zcode
+/root/.agents
 /root/.ssh
-/root/postgresql/data
+/var/lib/postgresql/data
 /root/.dsh
 /root/.kimi-code
 /root/.config/opencode
@@ -91,6 +92,8 @@ AI 不要直接在运行中的容器里修改这些内容后宣称完成。AI �
 /tmp
 /var
 ```
+
+例外：`/var/lib/postgresql/data` 是持久化挂载，不会丢。
 
 ## 数据和凭据
 
