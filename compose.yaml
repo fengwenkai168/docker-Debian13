@@ -30,6 +30,9 @@ services:
         # Node.js 主版本 24；配合 build.pull 使用最新 24.x。
         NODE_VERSION: "24"
 
+        # Debian apt 镜像；本地默认阿里云，GitHub Actions 覆盖为 deb.debian.org。
+        APT_MIRROR: "${APT_MIRROR:-mirrors.aliyun.com}"
+
         # npm 11 系列的最新版本；不指定具体补丁号，每次构建自动解析。
         NPM_VERSION: "11"
 

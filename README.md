@@ -369,10 +369,33 @@ host all all ::/0      scram-sha-256
 仓库根目录的 [`compose.yaml`](compose.yaml) 用于构建镜像：
 
 ```bash
-docker compose up -d --build
+docker compose -f compose.yaml up -d --build
 ```
 
 [`docker-compose.yaml`](docker-compose.yaml) 用于部署 GitHub 构建好的镜像。
+
+### 构建下载源
+
+- 本地构建默认使用阿里云 Debian 源
+- GitHub Actions 自动使用 `deb.debian.org`，避免海外 Runner 访问国内源过慢
+- 可以手动覆盖：
+  ```bash
+  APT_MIRROR=deb.debian.org docker compose -f compose.yaml build dev
+  ```
+
+### npm 源
+
+构建阶段始终使用 npm 官方源，确保安装当时的最新版本。所有 npm、pnpm、Playwright 安装完成后，镜像会把运行时默认 npm 源切换为国内加速源：
+
+```text
+https://registry.npmmirror.com/
+```
+
+容器内检查：
+
+```bash
+npm config get registry
+```
 
 ## GitHub Actions 自动构建
 
@@ -388,11 +411,12 @@ docker compose up -d --build
 
 1. 拉取最新 `node:24-trixie`
 2. 禁用 Docker 构建缓存
-3. 安装当时最新的 npm、pnpm、OpenCode、DSH、Kimi 和其他工具
-4. 构建并推送 GHCR 镜像
-5. 生成实际安装版本清单
-6. 创建 GitHub Release
-7. 更新本 README 的更新日志并提交回默认分支
+3. 使用 `deb.debian.org` 加快海外 Runner 的 apt 下载
+4. 安装当时最新的 npm、pnpm、OpenCode、DSH、Kimi 和其他工具
+5. 构建并推送 GHCR 镜像
+6. 生成实际安装版本清单
+7. 创建 GitHub Release
+8. 更新本 README 的更新日志并提交回默认分支
 
 如果默认分支启用了分支保护，需要允许 GitHub Actions Bot 直接推送，或者把最后一步改成自动创建 Pull Request，否则镜像和 Release 会成功，但 README 提交会失败。
 

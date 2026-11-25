@@ -17,6 +17,11 @@ ARG NPM_VERSION=11
 # 这里使用 ARG，因此不会把 DEBIAN_FRONTEND 永久保留为容器运行环境变量。
 ARG DEBIAN_FRONTEND=noninteractive
 
+# Debian apt 镜像主机名。
+# 本地构建默认使用阿里云；GitHub Actions 会通过构建参数改为 deb.debian.org，
+# 避免海外 Runner 访问国内镜像速度过慢。
+ARG APT_MIRROR=mirrors.aliyun.com
+
 # 要求 pnpm 不低于 11.11，同时固定在主版本 11，不跨到 pnpm 12。
 # ^11.11.0 会在每次全新构建时解析为 11.x 系列当时的最新版本。
 # 当前 npm 上 pnpm 11 的最新版本是 11.29.0，满足大于 11.11 的要求。
@@ -41,8 +46,11 @@ ARG PLAYWRIGHT_VERSION=latest
 
 # 在同一个 RUN 中完成系统软件安装、Node.js 全局工具安装和缓存清理。
 # 这样可以避免 apt/npm 缓存被前面的镜像层保留下来，减小最终镜像体积。
-RUN sed -i 's/deb.debian.org/mirrors.aliyun.com/g; s/security.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources \
-    # 上面的 sed 将 Debian 官方软件源替换为阿里云镜像源。
+RUN if [ -n "${APT_MIRROR}" ] && [ "${APT_MIRROR}" != "deb.debian.org" ]; then \
+        sed -i "s/deb.debian.org/${APT_MIRROR}/g; s/security.debian.org/${APT_MIRROR}/g" \
+            /etc/apt/sources.list.d/debian.sources; \
+    fi \
+    # 本地默认把 Debian 源替换为阿里云；GitHub Actions 保持 deb.debian.org。
     # 下面的 apt-get update 用于刷新软件包索引。
     && apt-get update \
     # -y：自动确认安装。
@@ -88,7 +96,14 @@ RUN sed -i 's/deb.debian.org/mirrors.aliyun.com/g; s/security.debian.org/mirrors
     # OPENCODE_VERSION=2 时，OpenCode 实际安装包为 @opencode/cli@2。
     # OpenCode 的 postinstall 脚本会选择适合当前 CPU/系统的原生二进制文件，
     # 因此安装时不能添加 --ignore-scripts。
+    # --allow-scripts 显式允许以下可信包执行安装脚本：
+    # - OpenCode/Kimi 的原生二进制选择
+    # - DSH 的 spawn helper
+    # - koffi/node-pty 的原生模块构建
+    # - Google GenAI/protobufjs 的安装钩子
+    # 不使用 --dangerously-allow-all-scripts，避免放行未知包。
     && npm install --global \
+        "--allow-scripts=@moonshot-ai/kimi-code,@opencode/cli,@deepseek-ai/dsh-subprocess-local,koffi,node-pty,@google/genai,protobufjs" \
         "pnpm@${PNPM_VERSION}" \
         "@opencode/cli@${OPENCODE_VERSION}" \
         "@deepseek-ai/dsh@${DSH_VERSION}" \
@@ -304,7 +319,12 @@ RUN curl -LsSf https://astral.sh/uv/install.sh \
     && command -v fc-list \
     # 验证 zh_CN locale 和中文 Noto 字体已经生效。
     && locale -a | grep -qi '^zh_CN' \
-    && test -n "$(fc-list :lang=zh -f '%{family}\n' | head -n 1)"
+    && test -n "$(fc-list :lang=zh -f '%{family}\n' | head -n 1)" \
+    # 构建阶段始终使用 npm 官方源获取最新包。
+    # 所有安装完成后，再把镜像运行时的默认 npm 源切换为国内加速源。
+    # 这样不会影响本次构建的版本选择，但容器启动后 AI/用户 npm install 更快。
+    && npm config set registry https://registry.npmmirror.com/ --location=user \
+    && npm config get registry | grep -qx 'https://registry.npmmirror.com/'
 
 # 复制容器初始化脚本。
 # 它负责设置 root 密码、生成 SSH 配置和 host key，

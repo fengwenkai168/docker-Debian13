@@ -130,8 +130,12 @@ jobs:
       # compose.yaml 已设置 build.pull=true 和 build.no_cache=true：
       # - 先拉取最新 node:24-trixie 基础镜像；
       # - 不复用构建缓存，重新解析 npm 11、pnpm 11、OpenCode v2、DSH 和 Kimi latest。
+      # 显式指定 -f compose.yaml，避免与 docker-compose.yaml 产生歧义警告。
+      # APT_MIRROR=deb.debian.org 让海外 GitHub Runner 使用快速 Debian 源。
       - name: Build image with latest versions
-        run: docker compose build dev
+        env:
+          APT_MIRROR: deb.debian.org
+        run: docker compose -f compose.yaml build dev
 
       # 从 compose 配置中读取构建出的本地镜像名，不重复写死镜像标签。
       # 生成两个标签：
@@ -139,7 +143,7 @@ jobs:
       # - vX.Y.Z：本次构建对应的不可变语义版本。
       - name: Tag image
         run: |
-          local_image="$(docker compose config --images | head -n 1)"
+          local_image="$(docker compose -f compose.yaml config --images | head -n 1)"
           if [[ -z "$local_image" ]]; then
             echo "无法从 compose.yaml 获取镜像名称" >&2
             exit 1
