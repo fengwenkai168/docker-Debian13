@@ -269,7 +269,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add README.md
-          git commit -m "docs: update build changelog ${RELEASE_TAG} [skip ci]"
+          git commit -m "docs: 更新构建日志 ${RELEASE_TAG} [skip ci]"
 
           # 上一步导出的 Release 部署文件覆盖了仓库中已跟踪的 docker-compose.yaml。
           # Release 附件已经上传完成；这里恢复该文件，避免工作区存在未暂存修改，
