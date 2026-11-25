@@ -61,6 +61,8 @@ const DSH_TOKEN_FILE = process.env.DSH_TOKEN_FILE ?? "/run/dsh-web-token";
 const DSH_WEB_PASSWORD = process.env.DSH_WEB_PASSWORD ?? "";
 
 // 代理登录 Cookie 名称和有效期。
+// 代理登录有效期 7 天；dsh 自己的会话 Cookie 默认 30 天。
+// 代理 Cookie 先过期，所以实际体验是每 7 天需要重新输入一次密码。
 const AUTH_COOKIE = "dsh_proxy_auth";
 const AUTH_TTL_SECONDS = 7 * 24 * 60 * 60;
 const AUTH_SECRET = DSH_WEB_PASSWORD || DSH_WEB_TOKEN;
