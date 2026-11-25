@@ -123,8 +123,6 @@ row 'unzip' unzip -v
 row 'Vim' vim --version
 row 'less' less --version
 row 'htop' htop --version
-row 'Chromium' chromium --version
-row 'Chromium 中文语言包' dpkg-query -W '-f=${Version}' chromium-l10n
 row 'Noto CJK' dpkg-query -W '-f=${Version}' fonts-noto-cjk
 row 'Fontconfig' fc-list --version
 row 'Playwright' playwright --version
@@ -144,8 +142,10 @@ then
     exit 1
 fi
 
-# 版本表固定为 44 行；新增或删除工具时必须同步更新这个值。
-expected_version_rows=44
+# 版本表固定为 42 行；新增或删除工具时必须同步更新这个值。
+# 系统 Chromium 不再安装；Playwright 使用自己下载的 Chromium，
+# 因此版本表只保留 Playwright 这一行。
+expected_version_rows=42
 actual_version_rows="$(grep -c '^| ' "$versions_file" || true)"
 if [[ "$actual_version_rows" -ne "$expected_version_rows" ]]; then
     echo "错误：版本表应有 ${expected_version_rows} 行，实际为 ${actual_version_rows} 行。" >&2

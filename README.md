@@ -1,6 +1,6 @@
 # Docker-Debian13
 
-自动构建的 Debian 13 开发容器镜像，内置 Node.js 24、Python、PostgreSQL 16、Chromium、常用开发工具和 AI 编程工具。
+自动构建的 Debian 13 开发容器镜像，内置 Node.js 24、Python、PostgreSQL 16、Playwright、常用开发工具和 AI 编程工具。
 
 镜像地址：
 
@@ -224,8 +224,6 @@ docker compose -f docker-compose.yaml logs --tail=100 dev | grep -F "database sy
 | Vim | `VIM - Vi IMproved 9.1 (2024 Jan 02, 编译于 Nov 04 2026 22:12:34)` |
 | less | `less 668 (GNU regular expressions)` |
 | htop | `htop 3.4.1` |
-| Chromium | `Chromium 156.0.8078.108 built on Debian GNU/Linux 13 (trixie)` |
-| Chromium 中文语言包 | `156.0.8078.108-1~deb13u1` |
 | Noto CJK | `1:20240730+repack1-1` |
 | Fontconfig | `fontconfig version 2.15.0` |
 | Playwright | `Version 1.65.1` |
@@ -262,7 +260,6 @@ docker compose -f docker-compose.yaml logs --tail=100 dev | grep -F "database sy
 - rsync、7-Zip、pigz、zip、unzip
 - Vim、less、htop
 - GitHub CLI `gh`
-- Chromium 中文界面
 - Noto CJK 中文字体和彩色 Emoji 字体
 - Playwright 包和 Playwright 专用 Chromium 浏览器
 
@@ -304,7 +301,7 @@ node your-playwright-script.js
 
 - `/usr/local/bin/playwright` 是 Playwright CLI
 - `/opt/playwright/node_modules` 通过 `NODE_PATH` 提供给项目脚本使用
-- Playwright 使用自己下载的 Chromium，不是 `/usr/bin/chromium`
+- Playwright 使用自己下载的 Chromium，不依赖系统浏览器；镜像不再安装 `/usr/bin/chromium`
 - 容器以 root 运行，Playwright 默认关闭 Chromium sandbox
 - AI 编程工具可以直接执行 `playwright` 命令或运行上述脚本
 
@@ -464,7 +461,7 @@ GitHub Release 也使用同一个语义版本。Release 附带的 `docker-compos
 - 容器内可登录的 Linux 用户只有 `root`。
 - PostgreSQL 使用系统服务用户 `postgres` 运行，但该用户不能用于 SSH 登录。
 - OpenCode 的用户名固定为 `opencode`，这是 OpenCode 的 HTTP Basic Auth 用户名，不是 Linux 用户。
-- Chromium 在 root 下通常需要 `--no-sandbox`。
+- Playwright 使用的 Chromium 在 root 下默认关闭 sandbox，只用于可信的自动化任务，不要用它浏览不可信网页。
 - PostgreSQL 宿主机 2223（容器 5432）、SSH 2222、OpenCode 2225（容器 49374）、Kimi 2226（容器 58627）、DSH 2224（容器 3080）默认监听所有网卡，公网部署必须修改默认密码并限制防火墙。
 - PostgreSQL 默认允许任意 IPv4/IPv6 来源使用 SCRAM 密码认证；如果不需要远程数据库访问，请收紧 `pg_hba.conf` 规则或关闭宿主机 2223 映射。
 - DeepSeek Harness 和 Kimi 使用固定 Token 时，Token 是长期凭证，不要在公开场所泄露。

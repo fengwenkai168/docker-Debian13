@@ -147,17 +147,15 @@ RUN if [ -n "${APT_MIRROR}" ] && [ "${APT_MIRROR}" != "deb.debian.org" ]; then \
     && mkdir -p /run/sshd /workspaces
 
 # ============================================================================
-# 安装通用开发工具、中文 Chromium 和字体
+# 安装通用开发工具和中文字体
 # ============================================================================
 # 全部使用 Debian 13 软件源中的最新可用版本。
 # 基础 Node 镜像来自 buildpack-deps，已经包含 gcc/g++/make/wget/unzip 等，
-# 这里只补充它没有的 Python、网络排障、编辑器和浏览器工具。
+# 这里只补充它没有的 Python、网络排障和编辑器工具。
+# 系统 Chromium 不在这里安装：AI 浏览器自动化使用后面单独下载的
+# Playwright Chromium，避免同时保留两套浏览器、白白增加镜像体积。
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        # Chromium 浏览器；中文界面依赖下面的 chromium-l10n 和 zh_CN locale。
-        chromium \
-        # Chromium 语言包，包含 zh-CN 和 zh-TW。
-        chromium-l10n \
         # 常用 C/C++ 构建工具；gcc/g++/make 已由基础镜像提供。
         cmake \
         # dig、nslookup 等 DNS 查询工具。
@@ -178,7 +176,7 @@ RUN apt-get update \
         iputils-ping \
         # 日志分页查看器。
         less \
-        # 生成 zh_CN.UTF-8 locale，供 Chromium 界面和其他工具使用。
+        # 生成 zh_CN.UTF-8 locale，供中文环境和 Playwright 浏览器使用。
         locales \
         # 查看打开的文件和端口。
         lsof \
@@ -212,7 +210,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 # 默认使用简体中文 locale。
-# LANG 会影响 Chromium UI 语言，LANGUAGE 为 gettext 提供中文优先级。
+# Playwright Chromium 和其他程序会继承该语言环境，LANGUAGE 为 gettext 提供中文优先级。
 ENV LANG=zh_CN.UTF-8 \
     LANGUAGE=zh_CN:zh
 
@@ -300,7 +298,6 @@ RUN curl -LsSf https://astral.sh/uv/install.sh \
     && htop --version \
     && pkg-config --version \
     # 验证命令行工具确实存在。
-    && command -v chromium \
     && command -v vim \
     && command -v zip \
     && command -v less \
