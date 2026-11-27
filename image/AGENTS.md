@@ -14,7 +14,7 @@
 
 - 容器内没有 systemd。
 - 禁止执行 `systemctl`、`service`、`reboot`、`shutdown`。
-- 服务由 Supervisor 管理，查看状态使用：
+- 服务由 Supervisor 管理。内置服务是 sshd、postgres、opencode、dsh、dsh-proxy、kimi；另有可选的 nocobase-runner（未注册时显示 EXITED 属正常）。查看状态使用：
 
 ```bash
 supervisorctl -c /etc/supervisor/supervisord.conf status
@@ -84,8 +84,20 @@ AI 不要直接在运行中的容器里修改这些内容后宣称完成。AI �
 /root/.kimi-code
 /root/.config/opencode
 /root/.local/share/opencode
+/root/.local/share/nocobase-runner
+/root/.local/share/nb-studio
+/root/.nocobase-runner
+/root/.nb-studio
+/root/.config/gh
+/root/.config/glab-cli
+/root/.config/gitea-cli
+/root/.config/gitee
+/root/.claude
+/root/.codex
 /etc/ssh
 ```
+
+其中 `nocobase-runner`、`nb-studio`、`gh`、`glab`、`gt`、`gitee`、`.claude`、`.codex` 相关的目录保存登录凭据或注册密钥，要按敏感数据处理，不要提交到仓库或公开分享。
 
 以下位置和未挂载目录在容器重建后会丢失：
 
