@@ -60,8 +60,9 @@ services:
       # DeepSeek Harness Web：宿主机 2224 → 容器 3080。
       - "2224:3080"
 
-      # OpenCode Web：宿主机 2225 → 容器 49374。
-      - "2225:49374"
+      # OpenCode Web：宿主机 2225 → 容器 4096（OpenCode v2 官方默认）。
+      # 49374 留给 OpenCode CLI 自己的后台 service，避免端口冲突。
+      - "2225:4096"
 
       # Kimi Code Web：宿主机 2226 → 容器 58627。
       - "2226:58627"

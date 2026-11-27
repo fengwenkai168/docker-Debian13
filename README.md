@@ -74,6 +74,8 @@ docker compose -f docker-compose.yaml up -d
 
 不要直接用新 Release 文件覆盖已经改过密码或端口的部署文件。如果部署文件指向 `latest`（例如仓库根目录中的版本），直接执行上面两条命令即可更新到最新镜像。
 
+从 OpenCode Web 使用官方默认端口 4096 的版本开始，现有部署文件里的 `- "2225:49374"` 必须改成 `- "2225:4096"`；宿主机访问端口仍是 2225，只是容器内目标端口变了。漏改会导致升级后 OpenCode Web 打不开。
+
 如果部署了 NocoBase 执行机，升级前请确认现有部署文件包含[“持久化目录”](#持久化目录)中新增的三个 runner 目录。缺少挂载时容器重建会丢失执行机注册，只能用新的 token 重新安装；详见[“NocoBase 执行机”](#nocobase-执行机nocobase-runner)。
 
 ## 服务与端口
@@ -525,7 +527,7 @@ GitHub Release 也使用同一个语义版本。Release 附带的 `docker-compos
 - PostgreSQL 使用系统服务用户 `postgres` 运行，但该用户不能用于 SSH 登录。
 - OpenCode 的用户名固定为 `opencode`，这是 OpenCode 的 HTTP Basic Auth 用户名，不是 Linux 用户。
 - Playwright 使用的 Chromium 在 root 下默认关闭 sandbox，只用于可信的自动化任务，不要用它浏览不可信网页。
-- PostgreSQL 宿主机 2223（容器 5432）、SSH 2222、OpenCode 2225（容器 49374）、Kimi 2226（容器 58627）、DSH 2224（容器 3080）默认监听所有网卡，公网部署必须修改默认密码并限制防火墙。
+- PostgreSQL 宿主机 2223（容器 5432）、SSH 2222、OpenCode 2225（容器 4096）、Kimi 2226（容器 58627）、DSH 2224（容器 3080）默认监听所有网卡，公网部署必须修改默认密码并限制防火墙。
 - PostgreSQL 默认允许任意 IPv4/IPv6 来源使用 SCRAM 密码认证；如果不需要远程数据库访问，请收紧 `pg_hba.conf` 规则或关闭宿主机 2223 映射。
 - DeepSeek Harness 的登录密码/Token 和 Kimi 的 Token 都是长期凭证，不要在公开场所泄露。
 - 不要在不可信网络中直接暴露 AI 工具端口，它们可以执行命令并访问 root 权限下的文件。

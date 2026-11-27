@@ -60,7 +60,7 @@ check_port() {
 
 check_port "sshd" 22
 check_port "PostgreSQL" 5432
-check_port "OpenCode" 49374
+check_port "OpenCode" 4096
 check_port "DSH" 3081
 check_port "DSH 代理" 3080
 check_port "Kimi Web" 58627
@@ -107,7 +107,7 @@ check_http_status() {
 
 # OpenCode 使用 Basic Auth；2xx 才代表接口可用。
 check_http_status "OpenCode" \
-    "http://127.0.0.1:49374/api/info" \
+    "http://127.0.0.1:4096/api/info" \
     '^2[0-9][0-9]$' \
     -u "opencode:${OPENCODE_PASSWORD:-}"
 

@@ -500,10 +500,10 @@ WORKDIR /workspaces
 # - 2001-2005：预留给开发服务，由 Compose 映射为相同宿主机端口。
 # - 3080：DeepSeek Harness Web，由 Compose 映射为宿主机 2224。
 # - 5432：PostgreSQL 16 的容器端口，由 Compose 映射为宿主机 2223。
-# - 49374：OpenCode Web，由 Compose 映射为宿主机 2225。
+# - 4096：OpenCode Web（v2 官方默认端口），由 Compose 映射为宿主机 2225。
 # - 58627：Kimi Code Web，由 Compose 映射为宿主机 2226。
 # EXPOSE 只是镜像元数据，不会自动发布端口；实际映射以 compose.yaml 的 ports 为准。
-EXPOSE 22 2001-2005 3080 5432 49374 58627
+EXPOSE 22 2001-2005 3080 5432 4096 58627
 
 # 每次启动容器时首先执行初始化脚本。
 # ROOT_PASSWORD、OPENCODE_PASSWORD、KIMI_CODE_PASSWORD 等运行时配置
@@ -517,7 +517,7 @@ ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 # - /usr/sbin/sshd -D -e
 # - /usr/local/bin/start-postgres.sh
 #   其内部 postgres 以 postgres 系统用户运行，监听 0.0.0.0:5432
-# - opencode serve --hostname 0.0.0.0 --port 49374
+# - opencode serve --hostname 0.0.0.0 --port 4096
 # - /usr/local/bin/start-dsh-web.sh
 #   其内部 dsh 监听 127.0.0.1:3081，并捕获真实 token
 # - node /usr/local/bin/dsh-proxy.cjs

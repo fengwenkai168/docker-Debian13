@@ -9,17 +9,25 @@ set -Eeuo pipefail
 
 bin=/root/.local/share/nocobase-runner/current/bin/nocobase-runner
 
+# Supervisor 的 startsecs=5 会把“启动后 5 秒内退出”当成启动失败，
+# 重试 5 次后变成 FATAL。未安装/未注册时先等过 5 秒再以 0 退出，
+# Supervisor 会记为正常结束，状态是 EXITED，不会显示 FATAL 红字。
+clean_exit() {
+    sleep 6
+    exit 0
+}
+
 # 全新容器还没安装：正常退出，避免 Supervisord 反复重启。
 if [[ ! -x "$bin" ]]; then
     echo "nocobase-runner 未安装，跳过启动；首次注册后执行 supervisorctl start nocobase-runner。" >&2
-    exit 0
+    clean_exit
 fi
 
 # 已安装但未注册（例如挂载目录为空或复制不完整）：也安静退出。
 # 注册凭据位于 /root/.nocobase-runner/credentials/<app-key>.json。
 if ! compgen -G '/root/.nocobase-runner/credentials/*.json' >/dev/null; then
     echo "nocobase-runner 未注册，跳过启动；完成注册后执行 supervisorctl start nocobase-runner。" >&2
-    exit 0
+    clean_exit
 fi
 
 # PATH 必须包含 /usr/local/bin：OpenCode、DeepSeek Harness、Kimi 都装在那里，

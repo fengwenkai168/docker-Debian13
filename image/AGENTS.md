@@ -55,7 +55,8 @@ AI 不要直接在运行中的容器里修改这些内容后宣称完成。AI �
 22    SSH
 5432  PostgreSQL
 3080  DeepSeek Harness
-49374 OpenCode
+4096  OpenCode Web（v2 官方默认）
+49374 OpenCode CLI 后台 service（仅回环）
 58627 Kimi
 ```
 
