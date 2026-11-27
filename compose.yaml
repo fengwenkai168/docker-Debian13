@@ -52,6 +52,11 @@ services:
         # Playwright npm latest 版本；同时安装配套 Chromium 浏览器。
         PLAYWRIGHT_VERSION: "latest"
 
+        # GitLab / Gitea / Gitee 官方 CLI；latest 表示构建时解析最新稳定版。
+        GLAB_VERSION: "latest"
+        GITEA_CLI_VERSION: "latest"
+        GITEE_CLI_VERSION: "latest"
+
     # 构建完成后赋予镜像的名称和标签。
     # 这里的 latest 只是本地镜像标签，不代表其中的工具都使用 latest 版本。
     image: docker-debian13:latest

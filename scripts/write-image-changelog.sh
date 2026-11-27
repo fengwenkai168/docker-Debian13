@@ -109,6 +109,9 @@ row 'Git' git --version
 row 'curl' curl --version
 row 'wget' wget --version
 row 'GitHub CLI' gh --version
+row 'GitLab CLI' glab --version
+row 'Gitea CLI' gt --version
+row 'Gitee CLI' gitee --version
 row 'GCC / G++' gcc --version
 row 'make' make --version
 row 'CMake' cmake --version
@@ -142,10 +145,10 @@ then
     exit 1
 fi
 
-# 版本表固定为 42 行；新增或删除工具时必须同步更新这个值。
+# 版本表固定为 45 行；新增或删除工具时必须同步更新这个值。
 # 系统 Chromium 不再安装；Playwright 使用自己下载的 Chromium，
 # 因此版本表只保留 Playwright 这一行。
-expected_version_rows=42
+expected_version_rows=45
 actual_version_rows="$(grep -c '^| ' "$versions_file" || true)"
 if [[ "$actual_version_rows" -ne "$expected_version_rows" ]]; then
     echo "错误：版本表应有 ${expected_version_rows} 行，实际为 ${actual_version_rows} 行。" >&2

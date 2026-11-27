@@ -44,6 +44,13 @@ ARG KIMI_CODE_VERSION=latest
 # Playwright 与它下载的 Chromium 浏览器版本必须匹配，因此由同一构建步骤安装。
 ARG PLAYWRIGHT_VERSION=latest
 
+# GitLab / Gitea / Gitee 官方 CLI 版本。
+# latest 表示构建时通过官方发布信息解析当前最新稳定版；
+# 需要固定版本时可用 --build-arg 覆盖，例如 GLAB_VERSION=1.133.0。
+ARG GLAB_VERSION=latest
+ARG GITEA_CLI_VERSION=latest
+ARG GITEE_CLI_VERSION=latest
+
 # 在同一个 RUN 中完成系统软件安装、Node.js 全局工具安装和缓存清理。
 # 这样可以避免 apt/npm 缓存被前面的镜像层保留下来，减小最终镜像体积。
 RUN if [ -n "${APT_MIRROR}" ] && [ "${APT_MIRROR}" != "deb.debian.org" ]; then \
@@ -246,6 +253,84 @@ RUN mkdir -p /etc/apt/keyrings \
     && command -v psql \
     # PostgreSQL 服务端二进制不加入 PATH，直接检查版本化路径。
     && test -x /usr/lib/postgresql/16/bin/postgres
+
+# ============================================================================
+# 安装 GitLab CLI、Gitea CLI 和 Gitee CLI
+# ============================================================================
+# Debian 13 官方的 glab 仍停留在 1.53.0，gt 和 gitee 则不在官方源中，
+# 因此直接从各自官方 Release 下载 .deb 或二进制，并校验 SHA-256。
+# 三个工具的发布产物都只区分 amd64 和 arm64；其他架构直接报错。
+RUN apt-get update \
+    # latest 表示构建时解析官方最新稳定版；显式版本则原样使用。
+    && if [ "${GLAB_VERSION}" = "latest" ]; then \
+           GLAB_VERSION="$(curl -fsSL 'https://gitlab.com/api/v4/projects/gitlab-org%2Fcli/releases?per_page=1' \
+               | jq -r '.[0].tag_name')"; \
+       fi \
+    && GLAB_VERSION="${GLAB_VERSION#v}" \
+    && if [ "${GITEA_CLI_VERSION}" = "latest" ]; then \
+           GITEA_CLI_VERSION="$(curl -fsSL 'https://dl.gitea.com/gitea-cli/version.json' \
+               | jq -r '.latest.version')"; \
+       fi \
+    && GITEA_CLI_VERSION="${GITEA_CLI_VERSION#v}" \
+    && if [ "${GITEE_CLI_VERSION}" = "latest" ]; then \
+           GITEE_CLI_VERSION="$(curl -fsSL 'https://gitee.com/api/v5/repos/oschina/gitee-cli/releases/latest' \
+               | jq -r '.tag_name')"; \
+       fi \
+    && GITEE_CLI_VERSION="${GITEE_CLI_VERSION#v}" \
+    # 版本号为空或格式异常时立即失败，避免拼接出错误 URL。
+    && for git_cli_version in "${GLAB_VERSION}" "${GITEA_CLI_VERSION}" "${GITEE_CLI_VERSION}"; do \
+           echo "${git_cli_version}" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' \
+               || { echo "无法解析 Git 平台 CLI 版本：${git_cli_version}" >&2; exit 1; }; \
+       done \
+    # 三个工具的发布产物都只区分 amd64 和 arm64。
+    && case "$(dpkg --print-architecture)" in \
+           amd64|arm64) git_cli_arch="$(dpkg --print-architecture)" ;; \
+           *) echo "不支持的架构：$(dpkg --print-architecture)" >&2; exit 1 ;; \
+       esac \
+    && glab_deb="glab_${GLAB_VERSION}_linux_${git_cli_arch}.deb" \
+    && gt_deb="gitea-cli_${GITEA_CLI_VERSION}_${git_cli_arch}.deb" \
+    && gitee_tar="gitee_${GITEE_CLI_VERSION}_linux_${git_cli_arch}.tar.gz" \
+    # 下载三个工具的发布物和各自的 checksums.txt。
+    && curl -fsSL -o "/tmp/${glab_deb}" \
+        "https://gitlab.com/gitlab-org/cli/-/releases/v${GLAB_VERSION}/downloads/${glab_deb}" \
+    && curl -fsSL -o /tmp/glab-checksums.txt \
+        "https://gitlab.com/gitlab-org/cli/-/releases/v${GLAB_VERSION}/downloads/checksums.txt" \
+    && curl -fsSL -o "/tmp/${gt_deb}" \
+        "https://gitea.com/gitea/cli/releases/download/v${GITEA_CLI_VERSION}/${gt_deb}" \
+    && curl -fsSL -o /tmp/gt-checksums.txt \
+        "https://gitea.com/gitea/cli/releases/download/v${GITEA_CLI_VERSION}/checksums.txt" \
+    && curl -fsSL -o "/tmp/${gitee_tar}" \
+        "https://gitee.com/oschina/gitee-cli/releases/download/v${GITEE_CLI_VERSION}/${gitee_tar}" \
+    && curl -fsSL -o /tmp/gitee-checksums.txt \
+        "https://gitee.com/oschina/gitee-cli/releases/download/v${GITEE_CLI_VERSION}/checksums.txt" \
+    # 用官方 checksums.txt 校验下载文件；Gitee 的文件名带 ./ 前缀，用 grep -F 匹配。
+    && glab_expected="$(grep -F "${glab_deb}" /tmp/glab-checksums.txt | awk '{print $1}' | head -n 1)" \
+    && { [ -n "${glab_expected}" ] \
+         && [ "${glab_expected}" = "$(sha256sum "/tmp/${glab_deb}" | awk '{print $1}')" ] \
+         || { echo "SHA-256 校验失败：${glab_deb}" >&2; exit 1; }; } \
+    && gt_expected="$(grep -F "${gt_deb}" /tmp/gt-checksums.txt | awk '{print $1}' | head -n 1)" \
+    && { [ -n "${gt_expected}" ] \
+         && [ "${gt_expected}" = "$(sha256sum "/tmp/${gt_deb}" | awk '{print $1}')" ] \
+         || { echo "SHA-256 校验失败：${gt_deb}" >&2; exit 1; }; } \
+    && gitee_expected="$(grep -F "${gitee_tar}" /tmp/gitee-checksums.txt | awk '{print $1}' | head -n 1)" \
+    && { [ -n "${gitee_expected}" ] \
+         && [ "${gitee_expected}" = "$(sha256sum "/tmp/${gitee_tar}" | awk '{print $1}')" ] \
+         || { echo "SHA-256 校验失败：${gitee_tar}" >&2; exit 1; }; } \
+    # 安装两个 .deb，apt 会解析依赖；gitee 只取压缩包内的二进制。
+    && apt-get install -y --no-install-recommends "/tmp/${glab_deb}" "/tmp/${gt_deb}" \
+    && tar -xzf "/tmp/${gitee_tar}" -C /tmp gitee \
+    && install -m 0755 /tmp/gitee /usr/local/bin/gitee \
+    # 清理下载物和 apt 索引，控制镜像体积。
+    && rm -rf "/tmp/${glab_deb}" "/tmp/${gt_deb}" "/tmp/${gitee_tar}" \
+        /tmp/glab-checksums.txt /tmp/gt-checksums.txt /tmp/gitee-checksums.txt /tmp/gitee \
+    && rm -rf /var/lib/apt/lists/* \
+    # 输出实际安装版本，并在命令缺失时让构建失败。
+    && glab --version \
+    && gt --version \
+    && gitee --version \
+    && command -v glab \
+    && command -v gt \
+    && command -v gitee
 
 # ============================================================================
 # 安装 uv、Playwright 本体和 Playwright 专用 Chromium

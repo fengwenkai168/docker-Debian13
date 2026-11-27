@@ -265,6 +265,9 @@ docker compose -f docker-compose.yaml logs --tail=100 dev | grep -F "database sy
 - rsync、7-Zip、pigz、zip、unzip
 - Vim、less、htop
 - GitHub CLI `gh`
+- GitLab CLI `glab`
+- Gitea CLI `gt`
+- Gitee CLI `gitee`
 - Noto CJK 中文字体和彩色 Emoji 字体
 - Playwright 包和 Playwright 专用 Chromium 浏览器
 
