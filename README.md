@@ -204,9 +204,9 @@ docker compose -f docker-compose.yaml logs --tail=100 dev | grep -F "database sy
 | Node.js | `v24.22.3` |
 | npm | `11.21.3` |
 | pnpm | `11.29.0` |
-| OpenCode | `opencode v2.4.1` |
+| OpenCode | `opencode v2.4.2` |
 | DeepSeek Harness | `0.2.2-rc.5` |
-| Kimi Code CLI | `2.8.0` |
+| Kimi Code CLI | `2.8.1` |
 | Python | `Python 3.13.5` |
 | pip | `pip 25.1.1 from /usr/lib/python3/dist-packages/pip (python 3.13)` |
 | venv | `随 Python 3.13` |
@@ -214,7 +214,10 @@ docker compose -f docker-compose.yaml logs --tail=100 dev | grep -F "database sy
 | Git | `git version 2.47.3` |
 | curl | `curl 8.14.1 (x86_64-pc-linux-gnu) libcurl/8.14.1 OpenSSL/3.5.9 zlib/1.3.1 brotli/1.1.0 zstd/1.5.7 libidn2/2.3.8 libpsl/0.21.2 libssh2/1.11.1 nghttp2/1.64.0 nghttp3/1.8.0 librtmp/2.3 OpenLDAP/2.6.10` |
 | wget | `GNU Wget 1.25.0 在 linux-gnu 上编译。` |
-| GitHub CLI | `gh version 2.105.0 (2026-11-17)` |
+| GitHub CLI | `gh version 2.106.0 (2026-11-25)` |
+| GitLab CLI | `glab 1.133.0 (093bdd1b8)` |
+| Gitea CLI | `gt version 2.0.0 (2026-11-18)` |
+| Gitee CLI | `gitee version v0.3.4 (10deff7)` |
 | GCC / G++ | `gcc (Debian 14.2.0-19) 14.2.0` |
 | make | `GNU Make 4.4.1` |
 | CMake | `cmake version 3.31.6` |
@@ -481,6 +484,70 @@ GitHub Release 也使用同一个语义版本。Release 附带的 `docker-compos
 每次 GitHub Actions 成功构建后，会自动在下面写入一条实际版本清单。完整历史也可以在同一次构建的 GitHub Release 和 Actions Artifact 中查看。
 
 <!-- changelog:start -->
+<details>
+<summary><strong>v0.0.9</strong> · 2026-11-27 06:38:04 UTC</summary>
+
+| 字段 | 内容 |
+| --- | --- |
+| 构建时间 | `2026-11-27 06:38:04 UTC` |
+| 镜像版本 | `v0.0.9` |
+| 仓库 | `fengwenkai168/docker-Debian13` |
+| 分支 / ref | `main` |
+| 提交 | [`f91c23e586f0aa9df88a8da15ce24d851eb1233d`](https://github.com/fengwenkai168/docker-Debian13/commit/f91c23e586f0aa9df88a8da15ce24d851eb1233d) |
+| Actions 运行 | #11（第 1 次尝试） |
+| 本地镜像 | `docker-debian13:latest` |
+| 镜像 ID | `sha256:77ec8a8e69eb18c0de9de61be6d33660c6a84cddf79663af6fa8a5f1cc08c4b7` |
+
+| 工具 | 版本 |
+| --- | --- |
+| Debian | `13.8` |
+| Node.js | `v24.22.3` |
+| npm | `11.21.3` |
+| pnpm | `11.29.0` |
+| OpenCode | `opencode v2.4.2` |
+| DeepSeek Harness | `0.2.2-rc.5` |
+| Kimi Code CLI | `2.8.1` |
+| Python | `Python 3.13.5` |
+| pip | `pip 25.1.1 from /usr/lib/python3/dist-packages/pip (python 3.13)` |
+| venv | `随 Python 3.13` |
+| uv | `uv 0.13.10 (x86_64-unknown-linux-gnu)` |
+| Git | `git version 2.47.3` |
+| curl | `curl 8.14.1 (x86_64-pc-linux-gnu) libcurl/8.14.1 OpenSSL/3.5.9 zlib/1.3.1 brotli/1.1.0 zstd/1.5.7 libidn2/2.3.8 libpsl/0.21.2 libssh2/1.11.1 nghttp2/1.64.0 nghttp3/1.8.0 librtmp/2.3 OpenLDAP/2.6.10` |
+| wget | `GNU Wget 1.25.0 在 linux-gnu 上编译。` |
+| GitHub CLI | `gh version 2.106.0 (2026-11-25)` |
+| GitLab CLI | `glab 1.133.0 (093bdd1b8)` |
+| Gitea CLI | `gt version 2.0.0 (2026-11-18)` |
+| Gitee CLI | `gitee version v0.3.4 (10deff7)` |
+| GCC / G++ | `gcc (Debian 14.2.0-19) 14.2.0` |
+| make | `GNU Make 4.4.1` |
+| CMake | `cmake version 3.31.6` |
+| pkg-config | `1.8.1` |
+| jq | `jq-1.7` |
+| ripgrep | `ripgrep 14.1.1` |
+| rsync | `rsync  version 3.5.0  protocol version 32` |
+| 7-Zip | `25.01+dfsg-1~deb13u2` |
+| pigz | `pigz 2.8` |
+| zip | `3.0-15+deb13u1` |
+| unzip | `UnZip 6.00 of 20 April 2009, by Debian. Original by Info-ZIP.` |
+| Vim | `VIM - Vi IMproved 9.1 (2024 Jan 02, 编译于 Nov 04 2026 22:12:34)` |
+| less | `less 668 (GNU regular expressions)` |
+| htop | `htop 3.4.1` |
+| Noto CJK | `1:20240730+repack1-1` |
+| Fontconfig | `fontconfig version 2.15.0` |
+| Playwright | `Version 1.65.1` |
+| iproute2 | `ip utility, iproute2-6.15.0, libbpf 1.5.0` |
+| lsof | `4.99.4+dfsg-2` |
+| strace | `strace -- version 6.13` |
+| dnsutils | `DiG 9.20.30-1~deb13u1-Debian` |
+| iputils-ping | `ping from iputils 20240905` |
+| netcat-openbsd | `1.229-1` |
+| traceroute | `1:2.1.6-1` |
+| OpenSSH Server | `1:10.0p1-7+deb13u4` |
+| Supervisor | `4.2.5` |
+| PostgreSQL | `psql (PostgreSQL) 16.16 (Debian 16.16-1.pgdg13+1)` |
+
+</details>
+
 <details>
 <summary><strong>v0.0.8</strong> · 2026-11-25 14:49:15 UTC</summary>
 
