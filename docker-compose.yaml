@@ -154,6 +154,19 @@ services:
       - "./root/.local/share/nb-studio:/root/.local/share/nb-studio"
       - "./root/.nocobase-runner:/root/.nocobase-runner"
 
+      # nb-studio CLI 的登录 profile、会话和缓存。
+      - "./root/.nb-studio:/root/.nb-studio"
+
+      # gh / glab / gt（Gitea CLI）/ gitee 的登录配置。
+      - "./root/.config/gh:/root/.config/gh"
+      - "./root/.config/glab-cli:/root/.config/glab-cli"
+      - "./root/.config/gitea-cli:/root/.config/gitea-cli"
+      - "./root/.config/gitee:/root/.config/gitee"
+
+      # Claude Code / Codex 的配置、登录态和 skills。
+      - "./root/.claude:/root/.claude"
+      - "./root/.codex:/root/.codex"
+
       # SSH 服务端配置和 host key。
       # 保留该目录后，容器重建不会改变 SSH 主机指纹。
       - "./etc/ssh:/etc/ssh"

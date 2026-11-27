@@ -169,9 +169,16 @@ POSTGRES_PASSWORD
 | `./root/.local/share/nocobase-runner` | NocoBase 执行机程序（运行时安装） |
 | `./root/.local/share/nb-studio` | NocoBase 应用 CLI（运行时安装） |
 | `./root/.nocobase-runner` | 执行机注册密钥、配置、日志和 run 记录 |
+| `./root/.nb-studio` | nb-studio CLI 登录 profile、会话和缓存 |
+| `./root/.config/gh` | GitHub CLI（gh）登录配置 |
+| `./root/.config/glab-cli` | GitLab CLI（glab）登录配置 |
+| `./root/.config/gitea-cli` | Gitea CLI（gt）登录配置 |
+| `./root/.config/gitee` | Gitee CLI 登录配置 |
+| `./root/.claude` | Claude Code 配置、登录态和 skills |
+| `./root/.codex` | Codex 配置、登录态和 skills |
 | `./etc/ssh` | SSH 服务端配置和 host key |
 
-`.nocobase-runner` 中的注册密钥可以直接代表这台执行机，必须按敏感数据保管，不能提交到仓库或公开分享。
+`.nocobase-runner`、`.nb-studio`、`.config/{gh,glab-cli,gitea-cli,gitee}`、`.claude` 和 `.codex` 都可能包含登录凭据，必须按敏感数据保管，不能提交到仓库或公开分享。
 
 ### 迁移数据
 
@@ -245,6 +252,54 @@ supervisorctl status nocobase-runner
 ### 安全
 
 执行机以 root 运行，agent 拥有完整权限，可以读写真实 home 和 `/workspaces`，**不是沙箱**。应部署在虚拟机或隔离环境，并按最小暴露面配置防火墙；`./root/.nocobase-runner` 按密钥保管。
+
+## NocoBase Studio CLI（nb-studio）
+
+`nb-studio` 是管理 NocoBase Studio 项目、任务、评论、PR、预览和发布的官方 CLI。它随执行机安装到 `./root/.local/share/nb-studio`（已挂载，重建不丢）。
+
+镜像不直接预装它：`nb-studio-cli` 不在公共 npm，官方安装器必须带一次性下载 token，包也是 UNLICENSED。因此采用和 runner 相同的模式：
+
+- 程序放在 `./root/.local/share/nb-studio`；
+- 登录 profile 放在 `./root/.nb-studio`；
+- 新机器首次安装一次，之后升级镜像不丢。
+
+### 首次安装
+
+在容器内执行 Studio 后台给出的下载命令：
+
+```bash
+curl -fsSL <应用地址>/api/agents/dist/installScript \
+  | sh -s -- --token <下载token>
+```
+
+下载 token 是敏感凭证，不要写进 Dockerfile、仓库或日志。
+
+### 登录
+
+```bash
+nb-studio login --server <应用地址>
+```
+
+容器内没有系统 keychain，会话会以 0600 权限保存在 `/root/.nb-studio/config.json`；该目录已挂载，重建容器后不需要重新登录。登录也可以用 `--no-browser`，CLI 会打印地址和一次性验证码。
+
+### Skills
+
+```bash
+nb-studio skills install
+```
+
+镜像没有安装 Claude Code / Codex 时，自动检测会失败；需要显式指定：
+
+```bash
+nb-studio skills install --tool claude
+nb-studio skills install --tool codex
+```
+
+Skill 会写入 `./root/.claude/skills`、`./root/.agents/skills` 和 `./root/.codex/skills`，这三个目录都已挂载。
+
+### 使用约定
+
+所有 NocoBase Studio 操作都通过 `nb-studio` 完成，不直接调用 HTTP 接口。
 
 ## 当前工具版本
 
