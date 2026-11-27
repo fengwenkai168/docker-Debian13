@@ -74,6 +74,8 @@ docker compose -f docker-compose.yaml up -d
 
 不要直接用新 Release 文件覆盖已经改过密码或端口的部署文件。如果部署文件指向 `latest`（例如仓库根目录中的版本），直接执行上面两条命令即可更新到最新镜像。
 
+如果部署了 NocoBase 执行机，升级前请确认现有部署文件包含[“持久化目录”](#持久化目录)中新增的三个 runner 目录。缺少挂载时容器重建会丢失执行机注册，只能用新的 token 重新安装；详见[“NocoBase 执行机”](#nocobase-执行机nocobase-runner)。
+
 ## 服务与端口
 
 | 服务 | 宿主机端口 | 登录方式 |
@@ -96,7 +98,7 @@ DeepSeek Harness 直接打开端口会显示代理登录页，登录成功后使
 
 域名需要解析到宿主机，防火墙需要放行对应端口。Docker 宿主机需要启用 IPv6 才能通过 IPv6 访问。
 
-容器健康检查会验证 Supervisor 中的六个服务、关键监听端口、PostgreSQL 就绪状态，以及 OpenCode、DSH 和 Kimi 的 HTTP 响应。`docker compose ps` 显示 `unhealthy` 时，需要查看 `supervisorctl status` 和容器日志；Docker 不会因为 `unhealthy` 自动重启容器。
+容器健康检查会验证 Supervisor 中的六个内置服务、关键监听端口、PostgreSQL 就绪状态，以及 OpenCode、DSH 和 Kimi 的 HTTP 响应。已注册 NocoBase 执行机时，还会要求 `nocobase-runner` 处于 RUNNING。`docker compose ps` 显示 `unhealthy` 时，需要查看 `supervisorctl status` 和容器日志；Docker 不会因为 `unhealthy` 自动重启容器。
 
 ## 配置方式
 
@@ -162,7 +164,12 @@ POSTGRES_PASSWORD
 | `./root/.kimi-code` | Kimi Code 配置、凭据、会话和 token |
 | `./root/.config/opencode` | OpenCode 配置 |
 | `./root/.local/share/opencode` | OpenCode 数据和会话 |
+| `./root/.local/share/nocobase-runner` | NocoBase 执行机程序（运行时安装） |
+| `./root/.local/share/nb-studio` | NocoBase 应用 CLI（运行时安装） |
+| `./root/.nocobase-runner` | 执行机注册密钥、配置、日志和 run 记录 |
 | `./etc/ssh` | SSH 服务端配置和 host key |
+
+`.nocobase-runner` 中的注册密钥可以直接代表这台执行机，必须按敏感数据保管，不能提交到仓库或公开分享。
 
 ### 迁移数据
 
@@ -192,6 +199,50 @@ docker compose -f docker-compose.yaml logs --tail=100 dev | grep -F "database sy
 ```
 
 看到 `database system is shut down` 后再使用 `rsync -a` 等方式复制。部署目录中包含 SSH host key、登录凭据和 Token，复制件必须按敏感数据保管。
+
+## NocoBase 执行机（nocobase-runner）
+
+镜像**不预装** runner：服务端下载接口必须带一次性注册 token，构建阶段无法安全获取；把 token 打进镜像还会泄露密钥，而且一个 token 只能注册一台机器。镜像负责启动包装、Supervisor 托管和持久化目录；完成一次注册后，容器重启或升级镜像都会自动上线。
+
+### 首次安装
+
+在 NocoBase 的 Runtimes/Agents 页面添加执行机，复制命令，在容器内执行时追加 `--no-service`：
+
+```bash
+curl -fsSL <应用地址>/api/agents/dist/installScript \
+  | sh -s -- --runner --server <应用地址> --token <注册token> --no-service
+supervisorctl start nocobase-runner
+```
+
+- 容器内没有 systemd，`nocobase-runner service install` 会失败，所以用 `--no-service` 跳过安装服务，由 Supervisor 托管。
+- 第一条命令只安装和注册，不启动；第二条命令由 Supervisor 启动。
+- 如果直接执行了不带 `--no-service` 的官方命令，注册通常已经成功，只是最后装服务那步报错；此时直接 `supervisorctl start nocobase-runner`，不要用同一个 token 反复重试。
+- token 是一次性凭证，不要写入仓库、镜像或报告。
+
+### 状态与排障
+
+```bash
+nocobase-runner status
+supervisorctl status nocobase-runner
+```
+
+- `EXITED` 且未注册：正常，说明还没安装。
+- `RUNNING` 且 `status` 显示 online：正常。
+- 启动失败时查看 `nocobase-runner logs` 和 `docker compose logs`。
+- healthcheck 报 `nocobase-runner 已注册但未运行`：执行 `supervisorctl start nocobase-runner`，并检查日志。
+
+### 升级与持久化
+
+- runner 程序、应用 CLI、注册密钥分别位于上表三个目录；容器重建不会丢，不需要重新注册。
+- runner 默认自动更新：新版本写入挂载目录，退出码 75 由 Supervisor 重新拉起。
+- 手动更新：`nocobase-runner update --check` 或 `nocobase-runner update`。
+- 代理：在 compose 中设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY`、`NO_PROXY`，Supervisor 会继承。
+- 从旧版本升级：如果不想迁移旧注册，在重建后按“首次安装”用新 token 重装，并在 Runtimes 页面删除旧的离线记录。
+- 如果三个挂载没有加入部署文件，entrypoint 会打印警告；此时重建容器会丢失注册。
+
+### 安全
+
+执行机以 root 运行，agent 拥有完整权限，可以读写真实 home 和 `/workspaces`，**不是沙箱**。应部署在虚拟机或隔离环境，并按最小暴露面配置防火墙；`./root/.nocobase-runner` 按密钥保管。
 
 ## 当前工具版本
 
@@ -258,6 +309,7 @@ docker compose -f docker-compose.yaml logs --tail=100 dev | grep -F "database sy
 - OpenCode v2
 - DeepSeek Harness
 - Kimi Code CLI
+- NocoBase 执行机（可选，运行时安装，镜像不预装）
 
 ### 开发工具
 
@@ -478,6 +530,7 @@ GitHub Release 也使用同一个语义版本。Release 附带的 `docker-compos
 - DeepSeek Harness 的登录密码/Token 和 Kimi 的 Token 都是长期凭证，不要在公开场所泄露。
 - 不要在不可信网络中直接暴露 AI 工具端口，它们可以执行命令并访问 root 权限下的文件。
 - 镜像默认把 `/workspaces/*` 加入 git 的 `safe.directory`，让容器内的 root 能读取宿主机用户挂载的仓库，否则 OpenCode 的变更审查、快照和 `/undo` 会失效。代价是 root 会信任这些目录中的 git 配置和钩子，所以只应挂载可信代码。
+- NocoBase 执行机（可选）以 root 运行，agent 拥有完整权限，可读写真实 home 和 `/workspaces`，不是安全沙箱；建议部署在虚拟机或隔离环境。注册密钥保存在 `./root/.nocobase-runner`，必须按敏感数据保管。
 
 ## 更新日志
 

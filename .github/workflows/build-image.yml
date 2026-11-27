@@ -36,6 +36,7 @@ on:
       - start-postgres.sh
       - dsh-proxy.cjs
       - healthcheck.sh
+      - start-nocobase-runner.sh
       - supervisord.conf
       - compose.yaml
       - docker-compose.yaml
@@ -153,6 +154,15 @@ jobs:
           docker tag "$local_image" "$IMAGE_NAME:latest"
           docker tag "$local_image" "$IMAGE_NAME:${APP_VERSION}"
 
+      # 冒烟测试 NocoBase 执行机相关改动，避免后续修改把启动钩子弄丢：
+      # - 全新镜像中没有 runner 时，包装脚本必须正常退出（退出码 0）；
+      # - Supervisor 配置必须能解析，并且包含 7 个 program（6 个内置 + runner）。
+      - name: Smoke-test runner hooks
+        run: |
+          docker run --rm --entrypoint /usr/local/bin/start-nocobase-runner.sh "$LOCAL_IMAGE"
+          docker run --rm --entrypoint python3 "$LOCAL_IMAGE" -c \
+            "from supervisor.options import ServerOptions; o=ServerOptions(); o.realize(['-c','/etc/supervisor/supervisord.conf']); assert len(o.process_group_configs) == 7"
+
       # 从构建好的镜像中导出部署 compose 模板，并把镜像地址固定到本次构建。
       # 仓库内的 docker-compose.yaml 仍使用 latest；Release 附件使用
       # 当前仓库的镜像名和本次语义版本，保证下载某个 Release 后部署的就是该版本。
@@ -185,6 +195,18 @@ jobs:
             echo "错误：Release 部署文件仍在使用 latest 标签。" >&2
             exit 1
           fi
+
+          # NocoBase 执行机的程序、应用 CLI 和注册状态必须持久化。
+          # 缺任意一项，用户重建容器后都会丢失注册并需要新的 token。
+          for mount in \
+            ".nocobase-runner:/root/.nocobase-runner" \
+            ".local/share/nocobase-runner:/root/.local/share/nocobase-runner" \
+            ".local/share/nb-studio:/root/.local/share/nb-studio"; do
+            if ! grep -Fq "$mount" docker-compose.yaml; then
+              echo "错误：部署文件缺少执行机挂载 $mount。" >&2
+              exit 1
+            fi
+          done
 
       # 生成更新日志。
       # 脚本会启动一个临时容器，绕过服务入口，只执行各工具的 --version，

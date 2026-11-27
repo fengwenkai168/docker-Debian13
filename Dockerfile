@@ -221,6 +221,12 @@ RUN apt-get update \
 ENV LANG=zh_CN.UTF-8 \
     LANGUAGE=zh_CN:zh
 
+# 把用户级命令目录加入 PATH，便于直接执行安装脚本放入的
+# nocobase-runner、nb-studio 等命令。登录 shell 会读取 /etc/profile 并重置
+# PATH，因此再写一个 profile.d 片段，保证 SSH 登录后也能找到这些命令。
+ENV PATH="/root/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+RUN printf '%s\n' 'export PATH="/root/.local/bin:$PATH"' > /etc/profile.d/00-root-local-bin.sh
+
 # ============================================================================
 # 安装 GitHub CLI 和 PostgreSQL 16
 # ============================================================================
@@ -437,8 +443,14 @@ COPY dsh-proxy.cjs /usr/local/bin/dsh-proxy.cjs
 
 # 用自定义 Supervisor 配置替换软件包的默认配置。
 # 配置中定义了 sshd、postgres、opencode serve、dsh web、dsh-proxy 和 kimi web
-# 六个服务，以及日志转发和自动重启策略。
+# 六个内置服务，以及可选的 nocobase-runner，并提供日志转发和自动重启策略。
 COPY supervisord.conf /etc/supervisor/supervisord.conf
+
+# 复制 NocoBase 执行机的启动包装脚本。
+# 镜像不预装 runner：下载接口必须带一次性注册 token，无法在构建阶段安全获取。
+# 使用者完成一次性注册后，由 Supervisor 调用本脚本启动并托管 runner；
+# 未安装或未注册时脚本正常退出，不影响其他服务和 healthcheck。
+COPY start-nocobase-runner.sh /usr/local/bin/start-nocobase-runner.sh
 
 # 复制全服务健康检查脚本。
 # Docker 健康检查会同时验证 Supervisor 进程状态、监听端口、
@@ -464,6 +476,7 @@ RUN chmod 0755 \
     /usr/local/bin/start-dsh-web.sh \
     /usr/local/bin/start-kimi-web.sh \
     /usr/local/bin/start-postgres.sh \
+    /usr/local/bin/start-nocobase-runner.sh \
     /usr/local/bin/healthcheck.sh
 
 # 容器以 root 运行，而 /workspaces 由宿主机用户挂载，git 会因此拒绝操作这些仓库。
@@ -511,5 +524,7 @@ ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 #   对外监听 0.0.0.0:3080，改写 Host/Origin、转换固定 token 后转发到 127.0.0.1:3081
 # - /usr/local/bin/start-kimi-web.sh
 #   写入固定 Kimi token 后启动 Kimi Code Web，对外监听 0.0.0.0:58627
+# - /usr/local/bin/start-nocobase-runner.sh
+#   可选：已安装并注册 NocoBase 执行机时启动 runner；未安装时正常退出
 # 因而不需要在容器内安装或运行 systemd。
 CMD ["/usr/bin/supervisord", "-n", "-c", "/etc/supervisor/supervisord.conf"]

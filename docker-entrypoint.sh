@@ -101,6 +101,26 @@ EOF
 # Dockerfile 构建阶段已删除镜像自带的 key，避免不同容器共用同一主机身份。
 ssh-keygen -A
 
+# 恢复 NocoBase 执行机在 /root/.local/bin 下的命令软链。
+# runner 的程序、应用 CLI 和注册状态由 Compose 挂载持久化，但 /root/.local/bin
+# 本身在镜像临时层中；容器重建后这里不会覆盖已有文件，只补齐缺失的软链。
+mkdir -p /root/.local/bin
+for entry in \
+    "nocobase-runner:/root/.local/share/nocobase-runner" \
+    "nb-studio:/root/.local/share/nb-studio"; do
+    name="${entry%%:*}"
+    prefix="${entry#*:}"
+    if [[ -x "$prefix/current/bin/$name" ]]; then
+        ln -sfn "$prefix/current/bin/$name" "/root/.local/bin/$name"
+    fi
+done
+
+# 如果检测到 runner 数据但不在持久化挂载中，明确告警。
+# 此时容器仍可使用，但重建容器会丢失执行机注册，需要重新生成一次性 token。
+if [[ -d /root/.nocobase-runner ]] && ! mountpoint -q /root/.nocobase-runner; then
+    echo "警告：/root/.nocobase-runner 未挂载到宿主机，重建容器会丢失 NocoBase 执行机注册。" >&2
+fi
+
 # "$@" 是 Docker 传给 ENTRYPOINT 的全部参数，默认来自 Dockerfile 的 CMD。
 # exec 用目标进程替换当前 Bash 进程，使 supervisord 成为容器主进程，
 # 从而能直接接收 docker stop 发送的 SIGTERM 等信号并正确停止子服务。

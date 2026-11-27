@@ -2,7 +2,8 @@
 # 容器健康检查。
 #
 # 检查范围：
-# - Supervisor 管理的六个服务都处于 RUNNING；
+# - Supervisor 管理的六个内置服务都处于 RUNNING；
+# - 如果已注册 NocoBase 执行机，nocobase-runner 也必须处于 RUNNING；
 # - sshd、PostgreSQL、OpenCode、DSH、DSH 代理和 Kimi 的实际监听端口；
 # - PostgreSQL 可以接受连接；
 # - OpenCode 的认证接口正常；
@@ -34,6 +35,19 @@ for program in sshd postgres opencode dsh dsh-proxy kimi; do
         fail "服务 $program 未处于 RUNNING：$program_line"
     fi
 done
+
+# 1.1 NocoBase 执行机是可选的：只有存在注册凭据时才要求它处于 RUNNING。
+# 未安装或未注册的容器不会因为缺少 runner 被判 unhealthy；
+# 已注册却被停掉或崩溃时则明确报错，避免执行机静默离线。
+if compgen -G '/root/.nocobase-runner/credentials/*.json' >/dev/null; then
+    runner_line="$(grep -E '^nocobase-runner[[:space:]]' <<< "$supervisor_output" || true)"
+    if [[ -z "$runner_line" ]]; then
+        fail "nocobase-runner 已注册，但 Supervisor 中找不到该服务"
+    fi
+    if [[ ! "$runner_line" =~ [[:space:]]RUNNING[[:space:]] ]]; then
+        fail "nocobase-runner 已注册但未运行：$runner_line"
+    fi
+fi
 
 # 2. 监听端口。仅连接本地回环地址，不发送业务数据。
 check_port() {
